@@ -1,0 +1,324 @@
+{
+  "name": "vagrant-manager",
+  "displayName": "Vagrant Manager",
+  "description": "Gerencie suas VMs Vagrant direto do VS Code: up, halt, reload, provision, ssh e destroy pela sidebar.",
+  "version": "0.1.0",
+  "publisher": "genndi",
+  "author": "Gustavo Enndi",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/genndi/vscode-vagrant-manager.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "vagrant",
+    "virtualbox",
+    "vm",
+    "devops"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "workspaceContains:**/Vagrantfile"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "vagrantManager",
+          "title": "Vagrant",
+          "icon": "media/vagrant.svg"
+        }
+      ]
+    },
+    "views": {
+      "vagrantManager": [
+        {
+          "id": "vagrantManager.machines",
+          "name": "Machines"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "vagrantManager.machines",
+        "contents": "Nenhum Vagrantfile encontrado no workspace nem no global-status.\n[Atualizar](command:vagrantManager.refresh)"
+      }
+    ],
+    "commands": [
+      {
+        "command": "vagrantManager.refresh",
+        "title": "Refresh",
+        "category": "Vagrant",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "vagrantManager.up",
+        "title": "Up",
+        "category": "Vagrant",
+        "icon": "$(play)"
+      },
+      {
+        "command": "vagrantManager.halt",
+        "title": "Halt",
+        "category": "Vagrant",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "vagrantManager.reload",
+        "title": "Reload",
+        "category": "Vagrant",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "vagrantManager.provision",
+        "title": "Provision",
+        "category": "Vagrant",
+        "icon": "$(tools)"
+      },
+      {
+        "command": "vagrantManager.suspend",
+        "title": "Suspend",
+        "category": "Vagrant",
+        "icon": "$(debug-pause)"
+      },
+      {
+        "command": "vagrantManager.resume",
+        "title": "Resume",
+        "category": "Vagrant",
+        "icon": "$(debug-continue)"
+      },
+      {
+        "command": "vagrantManager.destroy",
+        "title": "Destroy",
+        "category": "Vagrant",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "vagrantManager.ssh",
+        "title": "SSH",
+        "category": "Vagrant",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "vagrantManager.openVagrantfile",
+        "title": "Open Vagrantfile",
+        "category": "Vagrant",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "vagrantManager.openTerminal",
+        "title": "Open Terminal Here",
+        "category": "Vagrant",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "vagrantManager.showOutput",
+        "title": "Show Output",
+        "category": "Vagrant",
+        "icon": "$(output)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "vagrantManager.refresh",
+          "when": "view == vagrantManager.machines",
+          "group": "navigation"
+        },
+        {
+          "command": "vagrantManager.showOutput",
+          "when": "view == vagrantManager.machines",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "vagrantManager.up",
+          "when": "view == vagrantManager.machines && viewItem =~ /^machine\\.(?!running)/",
+          "group": "inline@1"
+        },
+        {
+          "command": "vagrantManager.ssh",
+          "when": "view == vagrantManager.machines && viewItem == machine.running",
+          "group": "inline@1"
+        },
+        {
+          "command": "vagrantManager.halt",
+          "when": "view == vagrantManager.machines && viewItem == machine.running",
+          "group": "inline@2"
+        },
+        {
+          "command": "vagrantManager.up",
+          "when": "view == vagrantManager.machines && viewItem =~ /^machine\\.(?!running)/",
+          "group": "1_lifecycle@1"
+        },
+        {
+          "command": "vagrantManager.resume",
+          "when": "view == vagrantManager.machines && viewItem == machine.saved",
+          "group": "1_lifecycle@2"
+        },
+        {
+          "command": "vagrantManager.halt",
+          "when": "view == vagrantManager.machines && viewItem == machine.running",
+          "group": "1_lifecycle@3"
+        },
+        {
+          "command": "vagrantManager.reload",
+          "when": "view == vagrantManager.machines && viewItem == machine.running",
+          "group": "1_lifecycle@4"
+        },
+        {
+          "command": "vagrantManager.suspend",
+          "when": "view == vagrantManager.machines && viewItem == machine.running",
+          "group": "1_lifecycle@5"
+        },
+        {
+          "command": "vagrantManager.provision",
+          "when": "view == vagrantManager.machines && viewItem == machine.running",
+          "group": "2_ops@1"
+        },
+        {
+          "command": "vagrantManager.ssh",
+          "when": "view == vagrantManager.machines && viewItem == machine.running",
+          "group": "2_ops@2"
+        },
+        {
+          "command": "vagrantManager.destroy",
+          "when": "view == vagrantManager.machines && viewItem =~ /^machine\\.(?!not_created)/",
+          "group": "9_danger@1"
+        },
+        {
+          "command": "vagrantManager.up",
+          "when": "view == vagrantManager.machines && viewItem == project",
+          "group": "inline@1"
+        },
+        {
+          "command": "vagrantManager.halt",
+          "when": "view == vagrantManager.machines && viewItem == project",
+          "group": "inline@2"
+        },
+        {
+          "command": "vagrantManager.up",
+          "when": "view == vagrantManager.machines && viewItem == project",
+          "group": "1_lifecycle@1"
+        },
+        {
+          "command": "vagrantManager.halt",
+          "when": "view == vagrantManager.machines && viewItem == project",
+          "group": "1_lifecycle@2"
+        },
+        {
+          "command": "vagrantManager.reload",
+          "when": "view == vagrantManager.machines && viewItem == project",
+          "group": "1_lifecycle@3"
+        },
+        {
+          "command": "vagrantManager.provision",
+          "when": "view == vagrantManager.machines && viewItem == project",
+          "group": "2_ops@1"
+        },
+        {
+          "command": "vagrantManager.openVagrantfile",
+          "when": "view == vagrantManager.machines && viewItem == project",
+          "group": "3_nav@1"
+        },
+        {
+          "command": "vagrantManager.openTerminal",
+          "when": "view == vagrantManager.machines && viewItem == project",
+          "group": "3_nav@2"
+        },
+        {
+          "command": "vagrantManager.destroy",
+          "when": "view == vagrantManager.machines && viewItem == project",
+          "group": "9_danger@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "vagrantManager.up",
+          "when": "false"
+        },
+        {
+          "command": "vagrantManager.halt",
+          "when": "false"
+        },
+        {
+          "command": "vagrantManager.reload",
+          "when": "false"
+        },
+        {
+          "command": "vagrantManager.provision",
+          "when": "false"
+        },
+        {
+          "command": "vagrantManager.suspend",
+          "when": "false"
+        },
+        {
+          "command": "vagrantManager.resume",
+          "when": "false"
+        },
+        {
+          "command": "vagrantManager.destroy",
+          "when": "false"
+        },
+        {
+          "command": "vagrantManager.ssh",
+          "when": "false"
+        },
+        {
+          "command": "vagrantManager.openVagrantfile",
+          "when": "false"
+        },
+        {
+          "command": "vagrantManager.openTerminal",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Vagrant Manager",
+      "properties": {
+        "vagrantManager.vagrantPath": {
+          "type": "string",
+          "default": "vagrant",
+          "description": "Caminho do executável do Vagrant."
+        },
+        "vagrantManager.showGlobalMachines": {
+          "type": "boolean",
+          "default": true,
+          "description": "Também lista projetos encontrados via `vagrant global-status`, além dos Vagrantfiles do workspace."
+        },
+        "vagrantManager.pruneGlobalStatus": {
+          "type": "boolean",
+          "default": false,
+          "description": "Usa `vagrant global-status --prune` para remover entradas inválidas do índice (mais lento)."
+        },
+        "vagrantManager.autoRefreshInterval": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Intervalo em segundos para atualizar automaticamente. 0 desliga."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "tsc -p ./ --noEmit",
+    "package": "npx -y -p node@22 -p @vscode/vsce@3 -- vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0"
+  }
+}
