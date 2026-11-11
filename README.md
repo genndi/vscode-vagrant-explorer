@@ -14,6 +14,7 @@ Gerencie suas VMs Vagrant direto do VS Code.
 - Saída dos comandos no canal de output **Vagrant Manager**, com progresso e cancelamento.
 - **Status bar** com VMs rodando / total e badge na Activity Bar.
 - Atualização automática quando um `Vagrantfile` muda.
+- Interface em **inglês** e **português (Brasil)**, seguindo o idioma do VS Code.
 
 ## Configurações
 
@@ -40,6 +41,12 @@ Para gerar o pacote instalável:
 npm run package                       # gera vagrant-manager-<versão>.vsix
 code --install-extension vagrant-manager-*.vsix
 ```
+
+### Traduções
+
+- Textos do `package.json` (comandos, configurações, view): `package.nls.json` (inglês) e `package.nls.pt-br.json`.
+- Textos do código usam `vscode.l10n.t('texto em inglês')`. Depois de adicionar ou mudar textos, rode `npm run l10n:export` para regenerar `l10n/bundle.l10n.json` e traduza as chaves novas em `l10n/bundle.l10n.pt-br.json`.
+- Para testar em português, rode o comando **Configure Display Language** e escolha `pt-br` (requer o language pack).
 
 ## Requisitos
 

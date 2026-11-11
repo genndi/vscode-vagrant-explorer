@@ -33,7 +33,7 @@ export class MachineItem extends vscode.TreeItem {
     this.description = machine.provider ? `${machine.stateLabel} · ${machine.provider}` : machine.stateLabel;
     // Tooltip fica indefinido de propósito: é preenchido sob demanda em resolveTreeItem.
     this.iconPath = stateIcon(machine.state);
-    this.command = { command: 'vagrantManager.showDetails', title: 'Detalhes', arguments: [machine] };
+    this.command = { command: 'vagrantManager.showDetails', title: vscode.l10n.t('Details'), arguments: [machine] };
   }
 }
 
@@ -131,7 +131,7 @@ export class MachinesProvider implements vscode.TreeDataProvider<Node> {
       try {
         const machines = await this.getStatus(el.cwd);
         if (machines.length === 0) {
-          return [new MessageItem('Nenhuma VM definida', 'info')];
+          return [new MessageItem(vscode.l10n.t('No VMs defined'), 'info')];
         }
         return machines.map((m) => new MachineItem(m));
       } catch (err) {
@@ -206,7 +206,7 @@ export class MachinesProvider implements vscode.TreeDataProvider<Node> {
 
     const items: Node[] = [];
     if (global instanceof Error) {
-      items.push(new MessageItem(`Falha no global-status: ${global.message.split('\n')[0]}`, 'warning', global.message));
+      items.push(new MessageItem(vscode.l10n.t('global-status failed: {0}', global.message.split('\n')[0]), 'warning', global.message));
     } else if (showGlobal) {
       for (const e of global) {
         if (!projects.has(e.home) && fs.existsSync(path.join(e.home, 'Vagrantfile'))) {
