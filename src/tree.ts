@@ -3,6 +3,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as vscode from 'vscode';
 import { Machine, GlobalEntry, status, globalStatus } from './vagrant';
+import { MachineDetails, loadDetails } from './details';
+import { renderTooltip } from './tooltip';
 
 export class ProjectItem extends vscode.TreeItem {
   readonly kind = 'project' as const;
@@ -29,8 +31,9 @@ export class MachineItem extends vscode.TreeItem {
     this.id = `machine:${machine.cwd}:${machine.name}`;
     this.contextValue = `machine.${machine.state}`;
     this.description = machine.provider ? `${machine.stateLabel} · ${machine.provider}` : machine.stateLabel;
-    this.tooltip = `${machine.name} — ${machine.stateLabel}\n${machine.cwd}`;
+    // Tooltip fica indefinido de propósito: é preenchido sob demanda em resolveTreeItem.
     this.iconPath = stateIcon(machine.state);
+    this.command = { command: 'vagrantManager.showDetails', title: 'Detalhes', arguments: [machine] };
   }
 }
 
@@ -78,8 +81,11 @@ export class MachinesProvider implements vscode.TreeDataProvider<Node> {
   private readonly globalEmitter = new vscode.EventEmitter<GlobalEntry[]>();
   readonly onDidLoadGlobal = this.globalEmitter.event;
 
+  private detailsCache = new Map<string, Promise<MachineDetails>>();
+
   refresh(): void {
     this.statusCache.clear();
+    this.detailsCache.clear();
     this.globalCache = undefined;
     this.emitter.fire();
   }
@@ -87,12 +93,34 @@ export class MachinesProvider implements vscode.TreeDataProvider<Node> {
   /** Atualiza só um projeto (após rodar um comando nele). */
   refreshProject(cwd: string): void {
     this.statusCache.delete(cwd);
+    for (const key of this.detailsCache.keys()) {
+      if (key.startsWith(`machine:${cwd}:`)) {
+        this.detailsCache.delete(key);
+      }
+    }
     this.globalCache = undefined;
     this.emitter.fire();
   }
 
   getTreeItem(el: Node): vscode.TreeItem {
     return el;
+  }
+
+  /** Chamado no hover: carrega os detalhes da VM e monta o tooltip. */
+  async resolveTreeItem(item: vscode.TreeItem, el: Node, token: vscode.CancellationToken): Promise<vscode.TreeItem> {
+    if (!(el instanceof MachineItem) || !el.id) {
+      return item;
+    }
+    try {
+      const details = await this.getDetails(el.machine);
+      if (!token.isCancellationRequested) {
+        item.tooltip = renderTooltip(el.machine, details);
+      }
+    } catch (err) {
+      const d: MachineDetails = { syncedFolders: [], errors: [err instanceof Error ? err.message : String(err)] };
+      item.tooltip = renderTooltip(el.machine, d);
+    }
+    return item;
   }
 
   async getChildren(el?: Node): Promise<Node[]> {
@@ -112,6 +140,23 @@ export class MachinesProvider implements vscode.TreeDataProvider<Node> {
       }
     }
     return [];
+  }
+
+  /** Detalhes da VM, com cache até o próximo refresh. */
+  getDetails(m: Machine): Promise<MachineDetails> {
+    const key = `machine:${m.cwd}:${m.name}`;
+    let p = this.detailsCache.get(key);
+    if (!p) {
+      p = loadDetails(m);
+      this.detailsCache.set(key, p);
+      p.catch(() => this.detailsCache.delete(key));
+    }
+    return p;
+  }
+
+  /** Estado atual de uma VM específica (usa o cache de status do projeto). */
+  async getMachine(cwd: string, name: string): Promise<Machine | undefined> {
+    return (await this.getStatus(cwd)).find((m) => m.name === name);
   }
 
   private getStatus(cwd: string): Promise<Machine[]> {
