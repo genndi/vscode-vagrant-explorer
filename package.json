@@ -2,7 +2,7 @@
   "name": "vagrant-manager",
   "displayName": "Vagrant Manager",
   "description": "Gerencie suas VMs Vagrant direto do VS Code: up, halt, reload, provision, ssh e destroy pela sidebar.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "genndi",
   "author": "Gustavo Enndi",
   "license": "MIT",
@@ -122,6 +122,18 @@
         "title": "Show Output",
         "category": "Vagrant",
         "icon": "$(output)"
+      },
+      {
+        "command": "vagrantManager.copyText",
+        "title": "Copy",
+        "category": "Vagrant",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "vagrantManager.showDetails",
+        "title": "Show Details",
+        "category": "Vagrant",
+        "icon": "$(info)"
       }
     ],
     "menus": {
@@ -138,6 +150,11 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "vagrantManager.showDetails",
+          "when": "view == vagrantManager.machines && viewItem =~ /^machine\\./",
+          "group": "0_info@1"
+        },
         {
           "command": "vagrantManager.up",
           "when": "view == vagrantManager.machines && viewItem =~ /^machine\\.(?!running)/",
@@ -279,6 +296,14 @@
         {
           "command": "vagrantManager.openTerminal",
           "when": "false"
+        },
+        {
+          "command": "vagrantManager.copyText",
+          "when": "false"
+        },
+        {
+          "command": "vagrantManager.showDetails",
+          "when": "false"
         }
       ]
     },
@@ -289,6 +314,11 @@
           "type": "string",
           "default": "vagrant",
           "description": "Caminho do executável do Vagrant."
+        },
+        "vagrantManager.vboxManagePath": {
+          "type": "string",
+          "default": "VBoxManage",
+          "description": "Caminho do VBoxManage, usado para mostrar CPUs, memória, rede e portas no tooltip das VMs VirtualBox."
         },
         "vagrantManager.showGlobalMachines": {
           "type": "boolean",

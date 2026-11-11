@@ -1,12 +1,33 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { MachinesProvider, MachineItem, ProjectItem } from './tree';
-import { stream } from './vagrant';
+import { Machine, stream } from './vagrant';
+import { DetailsPanel } from './detailsPanel';
 
 type Target = MachineItem | ProjectItem;
 
 let output: vscode.OutputChannel;
 const busy = new Set<string>();
+
+/**
+ * Normaliza o argumento dos comandos: vem como item da árvore (menus) ou
+ * como objeto JSON simples (links do card de tooltip).
+ */
+function toTarget(arg: unknown): Target | undefined {
+  if (arg instanceof MachineItem || arg instanceof ProjectItem) {
+    return arg;
+  }
+  if (arg && typeof arg === 'object') {
+    const o = arg as Partial<Machine>;
+    if (typeof o.cwd === 'string' && typeof o.name === 'string') {
+      return new MachineItem(o as Machine);
+    }
+    if (typeof o.cwd === 'string') {
+      return new ProjectItem(o.cwd, false);
+    }
+  }
+  return undefined;
+}
 
 export function activate(context: vscode.ExtensionContext): void {
   output = vscode.window.createOutputChannel('Vagrant Manager');
@@ -29,7 +50,8 @@ export function activate(context: vscode.ExtensionContext): void {
     view.badge = running > 0 ? { value: running, tooltip: `${running} VM(s) rodando` } : undefined;
   });
 
-  const run = (sub: string, opts: { confirm?: string; extraArgs?: string[] } = {}) => async (t?: Target) => {
+  const run = (sub: string, opts: { confirm?: string; extraArgs?: string[] } = {}) => async (arg?: unknown) => {
+    const t = toTarget(arg);
     if (!t) {
       vscode.window.showWarningMessage('Use este comando pela view Vagrant.');
       return;
@@ -53,8 +75,21 @@ export function activate(context: vscode.ExtensionContext): void {
       'vagrantManager.destroy',
       run('destroy', { confirm: 'Destroy', extraArgs: ['--force'] }),
     ),
-    vscode.commands.registerCommand('vagrantManager.ssh', (t?: MachineItem) => {
-      if (!t) {
+    vscode.commands.registerCommand('vagrantManager.showDetails', (arg?: unknown) => {
+      const t = toTarget(arg);
+      if (t instanceof MachineItem) {
+        DetailsPanel.show(provider, t.machine);
+      }
+    }),
+    vscode.commands.registerCommand('vagrantManager.copyText', async (text?: string) => {
+      if (typeof text === 'string') {
+        await vscode.env.clipboard.writeText(text);
+        vscode.window.setStatusBarMessage('$(copy) Copiado para a área de transferência', 3000);
+      }
+    }),
+    vscode.commands.registerCommand('vagrantManager.ssh', (arg?: unknown) => {
+      const t = toTarget(arg);
+      if (!(t instanceof MachineItem)) {
         return;
       }
       const term = vscode.window.createTerminal({
@@ -65,9 +100,11 @@ export function activate(context: vscode.ExtensionContext): void {
       term.sendText(`${vagrantCmd()} ssh ${shellQuote(t.machine.name)}`);
       term.show();
     }),
-    vscode.commands.registerCommand('vagrantManager.openVagrantfile', async (t?: ProjectItem) => {
+    vscode.commands.registerCommand('vagrantManager.openVagrantfile', async (arg?: unknown) => {
+      const t = toTarget(arg);
       if (t) {
-        await vscode.window.showTextDocument(vscode.Uri.file(path.join(t.cwd, 'Vagrantfile')));
+        const cwd = t instanceof MachineItem ? t.machine.cwd : t.cwd;
+        await vscode.window.showTextDocument(vscode.Uri.file(path.join(cwd, 'Vagrantfile')));
       }
     }),
     vscode.commands.registerCommand('vagrantManager.openTerminal', (t?: ProjectItem) => {
