@@ -108,7 +108,7 @@ export async function status(cwd: string): Promise<Machine[]> {
   const res = await exec(['status', '--machine-readable'], cwd);
   if (res.code !== 0) {
     const err = parseMachineReadable(res.stdout).find((l) => l.type === 'error-exit');
-    throw new Error(err?.data[1] || res.stderr.trim() || `vagrant status saiu com código ${res.code}`);
+    throw new Error(err?.data[1] || res.stderr.trim() || vscode.l10n.t('vagrant status exited with code {0}', String(res.code)));
   }
   const byName = new Map<string, Machine>();
   const get = (name: string) => {
@@ -146,7 +146,7 @@ export async function globalStatus(prune: boolean): Promise<GlobalEntry[]> {
   }
   const res = await exec(args, undefined, prune ? 180_000 : 60_000);
   if (res.code !== 0) {
-    throw new Error(res.stderr.trim() || `vagrant global-status saiu com código ${res.code}`);
+    throw new Error(res.stderr.trim() || vscode.l10n.t('vagrant global-status exited with code {0}', String(res.code)));
   }
   const entries: GlobalEntry[] = [];
   let cur: Partial<GlobalEntry> | undefined;

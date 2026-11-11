@@ -1,8 +1,8 @@
 {
   "name": "vagrant-manager",
   "displayName": "Vagrant Manager",
-  "description": "Gerencie suas VMs Vagrant direto do VS Code: up, halt, reload, provision, ssh e destroy pela sidebar.",
-  "version": "0.2.0",
+  "description": "%extension.description%",
+  "version": "0.3.0",
   "publisher": "genndi",
   "author": "Gustavo Enndi",
   "license": "MIT",
@@ -40,98 +40,98 @@
       "vagrantManager": [
         {
           "id": "vagrantManager.machines",
-          "name": "Machines"
+          "name": "%view.machines%"
         }
       ]
     },
     "viewsWelcome": [
       {
         "view": "vagrantManager.machines",
-        "contents": "Nenhum Vagrantfile encontrado no workspace nem no global-status.\n[Atualizar](command:vagrantManager.refresh)"
+        "contents": "%view.welcome%"
       }
     ],
     "commands": [
       {
         "command": "vagrantManager.refresh",
-        "title": "Refresh",
+        "title": "%command.refresh%",
         "category": "Vagrant",
         "icon": "$(refresh)"
       },
       {
         "command": "vagrantManager.up",
-        "title": "Up",
+        "title": "%command.up%",
         "category": "Vagrant",
         "icon": "$(play)"
       },
       {
         "command": "vagrantManager.halt",
-        "title": "Halt",
+        "title": "%command.halt%",
         "category": "Vagrant",
         "icon": "$(debug-stop)"
       },
       {
         "command": "vagrantManager.reload",
-        "title": "Reload",
+        "title": "%command.reload%",
         "category": "Vagrant",
         "icon": "$(debug-restart)"
       },
       {
         "command": "vagrantManager.provision",
-        "title": "Provision",
+        "title": "%command.provision%",
         "category": "Vagrant",
         "icon": "$(tools)"
       },
       {
         "command": "vagrantManager.suspend",
-        "title": "Suspend",
+        "title": "%command.suspend%",
         "category": "Vagrant",
         "icon": "$(debug-pause)"
       },
       {
         "command": "vagrantManager.resume",
-        "title": "Resume",
+        "title": "%command.resume%",
         "category": "Vagrant",
         "icon": "$(debug-continue)"
       },
       {
         "command": "vagrantManager.destroy",
-        "title": "Destroy",
+        "title": "%command.destroy%",
         "category": "Vagrant",
         "icon": "$(trash)"
       },
       {
         "command": "vagrantManager.ssh",
-        "title": "SSH",
+        "title": "%command.ssh%",
         "category": "Vagrant",
         "icon": "$(terminal)"
       },
       {
         "command": "vagrantManager.openVagrantfile",
-        "title": "Open Vagrantfile",
+        "title": "%command.openVagrantfile%",
         "category": "Vagrant",
         "icon": "$(go-to-file)"
       },
       {
         "command": "vagrantManager.openTerminal",
-        "title": "Open Terminal Here",
+        "title": "%command.openTerminal%",
         "category": "Vagrant",
         "icon": "$(terminal)"
       },
       {
         "command": "vagrantManager.showOutput",
-        "title": "Show Output",
+        "title": "%command.showOutput%",
         "category": "Vagrant",
         "icon": "$(output)"
       },
       {
         "command": "vagrantManager.copyText",
-        "title": "Copy",
+        "title": "%command.copyText%",
         "category": "Vagrant",
         "icon": "$(copy)"
       },
       {
         "command": "vagrantManager.showDetails",
-        "title": "Show Details",
+        "title": "%command.showDetails%",
         "category": "Vagrant",
         "icon": "$(info)"
       }
@@ -313,28 +313,28 @@
         "vagrantManager.vagrantPath": {
           "type": "string",
           "default": "vagrant",
-          "description": "Caminho do executável do Vagrant."
+          "description": "%config.vagrantPath%"
         },
         "vagrantManager.vboxManagePath": {
           "type": "string",
           "default": "VBoxManage",
-          "description": "Caminho do VBoxManage, usado para mostrar CPUs, memória, rede e portas no tooltip das VMs VirtualBox."
+          "description": "%config.vboxManagePath%"
         },
         "vagrantManager.showGlobalMachines": {
           "type": "boolean",
           "default": true,
-          "description": "Também lista projetos encontrados via `vagrant global-status`, além dos Vagrantfiles do workspace."
+          "description": "%config.showGlobalMachines%"
         },
         "vagrantManager.pruneGlobalStatus": {
           "type": "boolean",
           "default": false,
-          "description": "Usa `vagrant global-status --prune` para remover entradas inválidas do índice (mais lento)."
+          "description": "%config.pruneGlobalStatus%"
         },
         "vagrantManager.autoRefreshInterval": {
           "type": "number",
           "default": 0,
           "minimum": 0,
-          "description": "Intervalo em segundos para atualizar automaticamente. 0 desliga."
+          "description": "%config.autoRefreshInterval%"
         }
       }
     }
@@ -344,11 +344,13 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "lint": "tsc -p ./ --noEmit",
-    "package": "npx -y -p node@22 -p @vscode/vsce@3 -- vsce package"
+    "package": "npx -y -p node@22 -p @vscode/vsce@3 -- vsce package",
+    "l10n:export": "npx -y -p node@22 -p @vscode/l10n-dev@0.0.35 -- vscode-l10n-dev export -o ./l10n ./src"
   },
   "devDependencies": {
     "@types/node": "^18.19.0",
     "@types/vscode": "^1.85.0",
     "typescript": "^5.4.0"
-  }
+  },
+  "l10n": "./l10n"
 }

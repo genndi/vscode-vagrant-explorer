@@ -45,15 +45,15 @@ export function activate(context: vscode.ExtensionContext): void {
   provider.onDidLoadGlobal((entries) => {
     const running = entries.filter((e) => e.state === 'running').length;
     statusItem.text = `$(vm) ${running}/${entries.length}`;
-    statusItem.tooltip = `Vagrant: ${running} VM(s) rodando de ${entries.length} conhecidas`;
+    statusItem.tooltip = vscode.l10n.t('Vagrant: {0} VM(s) running out of {1} known', running, entries.length);
     statusItem.show();
-    view.badge = running > 0 ? { value: running, tooltip: `${running} VM(s) rodando` } : undefined;
+    view.badge = running > 0 ? { value: running, tooltip: vscode.l10n.t('{0} VM(s) running', running) } : undefined;
   });
 
   const run = (sub: string, opts: { confirm?: string; extraArgs?: string[] } = {}) => async (arg?: unknown) => {
     const t = toTarget(arg);
     if (!t) {
-      vscode.window.showWarningMessage('Use este comando pela view Vagrant.');
+      vscode.window.showWarningMessage(vscode.l10n.t('Use this command from the Vagrant view.'));
       return;
     }
     await runVagrant(provider, t, sub, opts);
@@ -73,7 +73,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('vagrantManager.resume', run('resume')),
     vscode.commands.registerCommand(
       'vagrantManager.destroy',
-      run('destroy', { confirm: 'Destroy', extraArgs: ['--force'] }),
+      run('destroy', { confirm: vscode.l10n.t('Destroy'), extraArgs: ['--force'] }),
     ),
     vscode.commands.registerCommand('vagrantManager.showDetails', (arg?: unknown) => {
       const t = toTarget(arg);
@@ -84,7 +84,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('vagrantManager.copyText', async (text?: string) => {
       if (typeof text === 'string') {
         await vscode.env.clipboard.writeText(text);
-        vscode.window.setStatusBarMessage('$(copy) Copiado para a área de transferência', 3000);
+        vscode.window.setStatusBarMessage(`$(copy) ${vscode.l10n.t('Copied to clipboard')}`, 3000);
       }
     }),
     vscode.commands.registerCommand('vagrantManager.ssh', (arg?: unknown) => {
@@ -158,17 +158,17 @@ async function runVagrant(
   opts: { confirm?: string; extraArgs?: string[] },
 ): Promise<void> {
   const cwd = t instanceof MachineItem ? t.machine.cwd : t.cwd;
-  const label = t instanceof MachineItem ? t.machine.name : `${path.basename(cwd)} (todas)`;
+  const label = t instanceof MachineItem ? t.machine.name : vscode.l10n.t('{0} (all)', path.basename(cwd));
 
   if (busy.has(cwd)) {
-    vscode.window.showWarningMessage(`Já existe um comando Vagrant rodando em ${path.basename(cwd)}.`);
+    vscode.window.showWarningMessage(vscode.l10n.t('A Vagrant command is already running in {0}.', path.basename(cwd)));
     return;
   }
 
   if (opts.confirm) {
     const pick = await vscode.window.showWarningMessage(
       `vagrant ${sub} ${label}?`,
-      { modal: true, detail: `Pasta: ${cwd}\nEssa ação não pode ser desfeita.` },
+      { modal: true, detail: vscode.l10n.t('Folder: {0}\nThis action cannot be undone.', cwd) },
       opts.confirm,
     );
     if (pick !== opts.confirm) {
@@ -208,8 +208,8 @@ async function runVagrant(
       vscode.window.setStatusBarMessage(`$(check) vagrant ${sub} ${label}`, 5000);
     } else {
       const action = await vscode.window.showErrorMessage(
-        `vagrant ${sub} ${label} falhou (código ${code}).`,
-        'Ver output',
+        vscode.l10n.t('vagrant {0} {1} failed (exit code {2}).', sub, label, String(code)),
+        vscode.l10n.t('Show output'),
       );
       if (action) {
         output.show();
@@ -217,8 +217,8 @@ async function runVagrant(
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    output.appendLine(`ERRO: ${msg}`);
-    vscode.window.showErrorMessage(`Não foi possível executar o vagrant: ${msg}`);
+    output.appendLine(vscode.l10n.t('ERROR: {0}', msg));
+    vscode.window.showErrorMessage(vscode.l10n.t('Could not run vagrant: {0}', msg));
   } finally {
     busy.delete(cwd);
     provider.refreshProject(cwd);
