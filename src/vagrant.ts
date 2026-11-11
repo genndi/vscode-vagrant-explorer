@@ -38,8 +38,13 @@ function vagrantPath(): string {
 
 /** Executa o vagrant e devolve a saída completa (para comandos de leitura). */
 export function exec(args: string[], cwd?: string, timeoutMs = 60_000): Promise<RunResult> {
+  return runProcess(vagrantPath(), args, cwd, timeoutMs);
+}
+
+/** Executa qualquer binário e devolve a saída completa. */
+export function runProcess(cmd: string, args: string[], cwd?: string, timeoutMs = 60_000): Promise<RunResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(vagrantPath(), args, { cwd, env: process.env });
+    const child = spawn(cmd, args, { cwd, env: process.env });
     let stdout = '';
     let stderr = '';
     const timer = setTimeout(() => child.kill(), timeoutMs);
