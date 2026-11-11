@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0
+
+- Suporte a inglês e português (Brasil): a interface segue o idioma configurado no VS Code (inglês é o padrão).
+
 ## 0.2.0
 
 - Tooltip compacto das VMs com estado, box, uptime, recursos, resumo da rede, SSH e links de ação.

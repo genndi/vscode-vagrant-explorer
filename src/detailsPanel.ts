@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import { Machine } from './vagrant';
 import { MachineDetails } from './details';
 import { MachinesProvider } from './tree';
-import { NIC, STATE_COLOR, formatMemory, parseVBoxTime, relToProject, sshCommand, tildify, uptime } from './tooltip';
+import { STATE_COLOR, nicLabel, formatMemory, parseVBoxTime, relToProject, sshCommand, tildify, uptime } from './tooltip';
 
 type Msg =
   | { type: 'command'; command: string }
@@ -126,12 +126,12 @@ export class DetailsPanel {
     const btn = (cmd: string, label: string, kind: 'primary' | 'secondary' | 'danger' = 'secondary') =>
       `<button class="${kind}" data-cmd="${cmd}">${h(label)}</button>`;
     const copyable = (text: string, display = text) =>
-      `<code class="copy" data-copy="${h(text)}" title="Clique para copiar">${h(display)}</code>`;
+      `<code class="copy" data-copy="${h(text)}" title="${h(vscode.l10n.t('Click to copy'))}">${h(display)}</code>`;
 
     const actions = running
       ? [
           btn('ssh', 'SSH', 'primary'),
-          ssh ? `<button class="secondary" data-copy="${h(ssh.command)}">Copiar SSH</button>` : '',
+          ssh ? `<button class="secondary" data-copy="${h(ssh.command)}">${h(vscode.l10n.t('Copy SSH'))}</button>` : '',
           btn('reload', 'Reload'),
           btn('provision', 'Provision'),
           btn('suspend', 'Suspend'),
@@ -146,19 +146,19 @@ export class DetailsPanel {
     const cards: string[] = [];
 
     if (!d) {
-      cards.push(`<section class="card wide"><p class="muted">Carregando detalhes…</p></section>`);
+      cards.push(`<section class="card wide"><p class="muted">${vscode.l10n.t('Loading details…')}</p></section>`);
     } else {
       // Recursos
       if (v && (v.cpus !== undefined || v.memoryMb !== undefined || v.osType)) {
         cards.push(`
           <section class="card">
-            <h2>Recursos</h2>
+            <h2>${vscode.l10n.t('Resources')}</h2>
             <div class="stats">
               ${v.cpus !== undefined ? `<div><span class="big">${v.cpus}</span><span class="muted">vCPU</span></div>` : ''}
               ${v.memoryMb !== undefined ? `<div><span class="big">${h(formatMemory(v.memoryMb))}</span><span class="muted">RAM</span></div>` : ''}
-              ${v.vramMb !== undefined ? `<div><span class="big">${v.vramMb} MB</span><span class="muted">vídeo</span></div>` : ''}
+              ${v.vramMb !== undefined ? `<div><span class="big">${v.vramMb} MB</span><span class="muted">${vscode.l10n.t('video')}</span></div>` : ''}
             </div>
-            ${v.osType ? `<dl><dt>Sistema</dt><dd>${h(v.osType)}</dd></dl>` : ''}
+            ${v.osType ? `<dl><dt>${vscode.l10n.t('OS')}</dt><dd>${h(v.osType)}</dd></dl>` : ''}
           </section>`);
       }
 
@@ -168,12 +168,12 @@ export class DetailsPanel {
         if (ssh) {
           rows.push(`<dt>SSH</dt><dd>${copyable(ssh.target)}</dd>`);
           if (d.ssh?.identityFile) {
-            rows.push(`<dt>Chave</dt><dd>${copyable(d.ssh.identityFile, relToProject(d.ssh.identityFile, m.cwd))}</dd>`);
+            rows.push(`<dt>${vscode.l10n.t('Key')}</dt><dd>${copyable(d.ssh.identityFile, relToProject(d.ssh.identityFile, m.cwd))}</dd>`);
           }
-          rows.push(`<dt>Comando</dt><dd>${copyable(ssh.command, 'ssh -p … (copiar)')}</dd>`);
+          rows.push(`<dt>${vscode.l10n.t('Command')}</dt><dd>${copyable(ssh.command, vscode.l10n.t('ssh -p … (copy)'))}</dd>`);
         }
         const fwd = v?.forwards.length
-          ? `<table><thead><tr><th>Host</th><th></th><th>Guest</th><th>Nome</th></tr></thead><tbody>
+          ? `<table><thead><tr><th>Host</th><th></th><th>Guest</th><th>${vscode.l10n.t('Name')}</th></tr></thead><tbody>
               ${v.forwards
                 .map(
                   (f) =>
@@ -184,9 +184,9 @@ export class DetailsPanel {
           : '';
         cards.push(`
           <section class="card">
-            <h2>Acesso</h2>
+            <h2>${vscode.l10n.t('Access')}</h2>
             ${rows.length ? `<dl>${rows.join('')}</dl>` : ''}
-            ${fwd ? `<h3>Portas redirecionadas</h3>${fwd}` : ''}
+            ${fwd ? `<h3>${vscode.l10n.t('Forwarded ports')}</h3>${fwd}` : ''}
           </section>`);
       }
 
@@ -194,16 +194,16 @@ export class DetailsPanel {
       if (v?.nics.length) {
         cards.push(`
           <section class="card wide">
-            <h2>Rede</h2>
+            <h2>${vscode.l10n.t('Network')}</h2>
             <table>
-              <thead><tr><th>#</th><th>Tipo</th><th>Rede</th><th>MAC</th><th>IP</th></tr></thead>
+              <thead><tr><th>#</th><th>${vscode.l10n.t('Type')}</th><th>${vscode.l10n.t('Network')}</th><th>MAC</th><th>IP</th></tr></thead>
               <tbody>
                 ${v.nics
                   .map((n) => {
-                    const kind = NIC[n.type]?.label ?? n.type;
+                    const kind = nicLabel(n.type);
                     return `<tr${n.connected ? '' : ' class="off"'}>
                       <td class="muted">${n.index}</td>
-                      <td><span class="pill pill-${h(n.type)}">${h(kind)}</span>${n.connected ? '' : ' <span class="muted">desconectada</span>'}</td>
+                      <td><span class="pill pill-${h(n.type)}">${h(kind)}</span>${n.connected ? '' : ` <span class="muted">${vscode.l10n.t('disconnected')}</span>`}</td>
                       <td>${n.network && n.type !== 'nat' ? `<code>${h(n.network)}</code>` : '<span class="muted">—</span>'}</td>
                       <td>${n.mac ? copyable(n.mac) : '<span class="muted">—</span>'}</td>
                       <td>${n.ip ? copyable(n.ip) : '<span class="muted">—</span>'}</td>
@@ -212,7 +212,7 @@ export class DetailsPanel {
                   .join('')}
               </tbody>
             </table>
-            ${v.nics.some((n) => n.ip) ? '' : '<p class="muted small">IPs aparecem apenas quando a VM tem VirtualBox Guest Additions.</p>'}
+            ${v.nics.some((n) => n.ip) ? '' : `<p class="muted small">${vscode.l10n.t('IPs only show up when the VM has VirtualBox Guest Additions.')}</p>`}
           </section>`);
       }
 
@@ -220,9 +220,9 @@ export class DetailsPanel {
       if (d.syncedFolders.length) {
         cards.push(`
           <section class="card wide">
-            <h2>Pastas sincronizadas</h2>
+            <h2>${vscode.l10n.t('Synced folders')}</h2>
             <table>
-              <thead><tr><th>Host</th><th></th><th>Guest</th><th>Tipo</th></tr></thead>
+              <thead><tr><th>Host</th><th></th><th>Guest</th><th>${vscode.l10n.t('Type')}</th></tr></thead>
               <tbody>
                 ${d.syncedFolders
                   .map(
@@ -237,18 +237,19 @@ export class DetailsPanel {
 
       // Identificação
       const ident: string[] = [];
-      if (v?.vmName) ident.push(`<dt>VM VirtualBox</dt><dd>${copyable(v.vmName)}</dd>`);
+      if (v?.vmName) ident.push(`<dt>${vscode.l10n.t('VirtualBox VM')}</dt><dd>${copyable(v.vmName)}</dd>`);
       if (d.id) ident.push(`<dt>ID</dt><dd>${copyable(d.id)}</dd>`);
       if (d.box) ident.push(`<dt>Box</dt><dd>${copyable(d.box.name)}${d.box.version ? ` <span class="muted">${h(d.box.version)}</span>` : ''}</dd>`);
-      ident.push(`<dt>Pasta</dt><dd>${copyable(m.cwd, tildify(m.cwd))}</dd>`);
+      ident.push(`<dt>${vscode.l10n.t('Folder')}</dt><dd>${copyable(m.cwd, tildify(m.cwd))}</dd>`);
       if (running && v?.stateSince) {
-        ident.push(`<dt>Ligada em</dt><dd>${h(new Date(parseVBoxTime(v.stateSince)).toLocaleString())}</dd>`);
+        ident.push(`<dt>${vscode.l10n.t('Started at')}</dt><dd>${h(new Date(parseVBoxTime(v.stateSince))
+          .toLocaleString(vscode.env.language))}</dd>`);
       }
-      cards.push(`<section class="card wide"><h2>Identificação</h2><dl>${ident.join('')}</dl></section>`);
+      cards.push(`<section class="card wide"><h2>${vscode.l10n.t('Identification')}</h2><dl>${ident.join('')}</dl></section>`);
 
       if (d.errors.length) {
         cards.push(
-          `<section class="card wide warn"><h2>Avisos</h2>${d.errors.map((e) => `<p>${h(e)}</p>`).join('')}</section>`,
+          `<section class="card wide warn"><h2>${vscode.l10n.t('Warnings')}</h2>${d.errors.map((e) => `<p>${h(e)}</p>`).join('')}</section>`,
         );
       }
     }
@@ -256,12 +257,12 @@ export class DetailsPanel {
     const color = STATE_COLOR[m.state] ?? '#6e7681';
     const sub = [
       d?.box ? `<code>${h(d.box.name)}</code>${d.box.version ? ` <span class="muted">${h(d.box.version)}</span>` : ''}` : '',
-      up ? `ligada há ${h(up)}` : '',
+      up ? h(vscode.l10n.t('up for {0}', up)) : '',
       `<span class="muted">${h(tildify(m.cwd))}</span>`,
     ].filter(Boolean);
 
     return /* html */ `<!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="${h(vscode.env.language)}">
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="${csp}">
@@ -364,11 +365,11 @@ export class DetailsPanel {
 
   <div class="toolbar">
     ${actions.join('')}
-    <button class="ghost" data-refresh>↻ Atualizar</button>
+    <button class="ghost" data-refresh>↻ ${h(vscode.l10n.t('Refresh'))}</button>
   </div>
 
   <div class="grid">${cards.join('')}</div>
-  <div id="toast">Copiado</div>
+  <div id="toast">${h(vscode.l10n.t('Copied'))}</div>
 
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();

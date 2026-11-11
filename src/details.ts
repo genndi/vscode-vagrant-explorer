@@ -201,7 +201,7 @@ async function readVBox(id: string, d: MachineDetails): Promise<void> {
   const vbox = cfg('vboxManagePath', 'VBoxManage');
   const res = await runProcess(vbox, ['showvminfo', id, '--machinereadable'], undefined, 15_000);
   if (res.code !== 0) {
-    d.errors.push(`VBoxManage: ${res.stderr.trim().split('\n')[0] || `código ${res.code}`}`);
+    d.errors.push(`VBoxManage: ${res.stderr.trim().split('\n')[0] || vscode.l10n.t('exit code {0}', String(res.code))}`);
     return;
   }
   const info = parseShowVmInfo(res.stdout);
@@ -222,7 +222,7 @@ async function readVBox(id: string, d: MachineDetails): Promise<void> {
 async function readSshConfig(m: Machine, d: MachineDetails): Promise<void> {
   const res = await exec(['ssh-config', m.name], m.cwd, 30_000);
   if (res.code !== 0) {
-    d.errors.push(`ssh-config: ${res.stderr.trim().split('\n')[0] || `código ${res.code}`}`);
+    d.errors.push(`ssh-config: ${res.stderr.trim().split('\n')[0] || vscode.l10n.t('exit code {0}', String(res.code))}`);
     return;
   }
   const ssh: SshConfig = {};

@@ -23,14 +23,25 @@ export const STATE_COLOR: Record<string, string> = {
   not_created: '#6e7681',
 };
 
-export const NIC: Record<string, { icon: string; label: string }> = {
-  nat: { icon: 'globe', label: 'NAT' },
-  intnet: { icon: 'lock', label: 'rede interna' },
-  hostonly: { icon: 'home', label: 'host-only' },
-  bridged: { icon: 'link', label: 'bridge' },
-  natnetwork: { icon: 'globe', label: 'NAT network' },
-  generic: { icon: 'plug', label: 'genérica' },
-};
+/** Rótulo legível do tipo de placa de rede do VirtualBox. */
+export function nicLabel(type: string): string {
+  switch (type) {
+    case 'nat':
+      return 'NAT';
+    case 'intnet':
+      return vscode.l10n.t('internal network');
+    case 'hostonly':
+      return 'host-only';
+    case 'bridged':
+      return 'bridge';
+    case 'natnetwork':
+      return 'NAT network';
+    case 'generic':
+      return vscode.l10n.t('generic');
+    default:
+      return type;
+  }
+}
 
 // ---------- helpers de formatação ----------
 
@@ -86,12 +97,12 @@ export function uptime(since: string): string | undefined {
   const t = parseVBoxTime(since);
   if (Number.isNaN(t)) return undefined;
   const min = Math.max(0, Math.floor((Date.now() - t) / 60_000));
-  if (min < 1) return 'menos de 1 min';
+  if (min < 1) return vscode.l10n.t('less than 1 min');
   if (min < 60) return `${min} min`;
   const h = Math.floor(min / 60);
   if (h < 24) return `${h}h ${min % 60}min`;
   const days = Math.floor(h / 24);
-  return `${days} dia${days > 1 ? 's' : ''} ${h % 24}h`;
+  return days > 1 ? vscode.l10n.t('{0} days {1}h', days, h % 24) : vscode.l10n.t('1 day {0}h', h % 24);
 }
 
 export function formatMemory(mb: number): string {
@@ -116,12 +127,12 @@ export function renderTooltip(m: Machine, d: MachineDetails | undefined): vscode
   const sub: string[] = [];
   if (d?.box) sub.push(`$(package) ${code(d.box.name)}${d.box.version ? ' ' + muted(esc(d.box.version)) : ''}`);
   const up = running && d?.vbox?.stateSince ? uptime(d.vbox.stateSince) : undefined;
-  if (up) sub.push(`$(clock) ligada há ${esc(up)}`);
+  if (up) sub.push(`$(clock) ${esc(vscode.l10n.t('up for {0}', up))}`);
   if (sub.length) header.push(sub.join(' &nbsp;·&nbsp; '));
   blocks.push(header.join('  \n'));
 
   if (!d) {
-    blocks.push('$(loading~spin) Carregando detalhes…');
+    blocks.push(`$(loading~spin) ${vscode.l10n.t('Loading details…')}`);
     return finish(md, blocks);
   }
 
@@ -132,7 +143,7 @@ export function renderTooltip(m: Machine, d: MachineDetails | undefined): vscode
     if (v.cpus !== undefined) res.push(`$(circuit-board) **${v.cpus}** vCPU`);
     if (v.memoryMb !== undefined) res.push(`$(server) **${esc(formatMemory(v.memoryMb))}** RAM`);
     if (v.osType) res.push(`$(device-desktop) ${esc(v.osType)}`);
-    blocks.push(`${section('dashboard', 'Recursos')}  \n${res.join(' &nbsp;&nbsp; ')}`);
+    blocks.push(`${section('dashboard', vscode.l10n.t('Resources'))}  \n${res.join(' &nbsp;&nbsp; ')}`);
   }
 
   // Rede e acesso em formato resumido (a lista completa fica no painel de detalhes).
@@ -141,7 +152,7 @@ export function renderTooltip(m: Machine, d: MachineDetails | undefined): vscode
     const names = v.nics.filter((n) => n.type !== 'nat' && n.network).map((n) => code(n.network!));
     const ips = v.nics.filter((n) => n.ip).map((n) => code(n.ip!));
     net.push(
-      `$(type-hierarchy-sub) ${muted('Rede')} &nbsp; **${v.nics.length}** placa${v.nics.length > 1 ? 's' : ''}` +
+      `$(type-hierarchy-sub) ${muted(vscode.l10n.t('Network'))} &nbsp; **${v.nics.length}** ${v.nics.length > 1 ? vscode.l10n.t('adapters') : vscode.l10n.t('adapter')}` +
         (names.length ? ` · ${names.join(' ')}` : ''),
     );
     if (ips.length) net.push(`$(globe) ${muted('IPs')} &nbsp; ${ips.join(' ')}`);
@@ -160,10 +171,10 @@ export function renderTooltip(m: Machine, d: MachineDetails | undefined): vscode
   }
 
   // Ações
-  const actions: string[] = [link('info', 'Detalhes', 'vagrantManager.showDetails', [m])];
+  const actions: string[] = [link('info', vscode.l10n.t('Details'), 'vagrantManager.showDetails', [m])];
   if (running) {
     actions.push(link('terminal', 'SSH', 'vagrantManager.ssh', [m]));
-    if (ssh) actions.push(link('copy', 'Copiar SSH', 'vagrantManager.copyText', [ssh.command]));
+    if (ssh) actions.push(link('copy', vscode.l10n.t('Copy SSH'), 'vagrantManager.copyText', [ssh.command]));
     actions.push(link('debug-restart', 'Reload', 'vagrantManager.reload', [m]));
     actions.push(link('debug-stop', 'Halt', 'vagrantManager.halt', [m]));
   } else {
