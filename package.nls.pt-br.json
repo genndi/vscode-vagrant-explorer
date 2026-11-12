@@ -16,6 +16,7 @@
   "command.showOutput": "Mostrar Output",
   "command.copyText": "Copiar",
   "command.showDetails": "Mostrar Detalhes",
+  "command.showTopology": "Mostrar Topologia de Rede",
   "config.vagrantPath": "Caminho do executável do Vagrant.",
   "config.vboxManagePath": "Caminho do VBoxManage, usado para mostrar CPUs, memória, rede e portas das VMs VirtualBox.",
   "config.showGlobalMachines": "Também lista projetos encontrados via `vagrant global-status`, além dos Vagrantfiles do workspace.",

@@ -2,7 +2,7 @@
   "name": "vagrant-manager",
   "displayName": "Vagrant Manager",
   "description": "%extension.description%",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "genndi",
   "author": "Gustavo Enndi",
   "license": "MIT",
@@ -134,12 +134,23 @@
         "title": "%command.showDetails%",
         "category": "Vagrant",
         "icon": "$(info)"
+      },
+      {
+        "command": "vagrantManager.showTopology",
+        "title": "%command.showTopology%",
+        "category": "Vagrant",
+        "icon": "$(type-hierarchy)"
       }
     ],
     "menus": {
       "view/title": [
         {
           "command": "vagrantManager.refresh",
+          "when": "view == vagrantManager.machines",
+          "group": "navigation"
+        },
+        {
+          "command": "vagrantManager.showTopology",
           "when": "view == vagrantManager.machines",
           "group": "navigation"
         },
@@ -239,6 +250,11 @@
           "command": "vagrantManager.provision",
           "when": "view == vagrantManager.machines && viewItem == project",
           "group": "2_ops@1"
+        },
+        {
+          "command": "vagrantManager.showTopology",
+          "when": "view == vagrantManager.machines && viewItem == project",
+          "group": "3_nav@0"
         },
         {
           "command": "vagrantManager.openVagrantfile",
