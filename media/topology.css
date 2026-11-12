@@ -56,7 +56,7 @@ aside#side {
 /* ---------- SVG ---------- */
 svg { display: block; user-select: none; }
 svg text { fill: var(--vscode-foreground); font-family: var(--vscode-font-family); }
-.project { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; fill: var(--muted); }
+.project { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; fill: var(--muted); }
 .project-line { stroke: var(--border); stroke-width: 1; }
 
 .bus { cursor: pointer; }
@@ -75,6 +75,10 @@ svg text { fill: var(--vscode-foreground); font-family: var(--vscode-font-family
 .drop-dot { fill: var(--c); stroke: var(--bg); stroke-width: 2; }
 .drop.off .drop-line { stroke-dasharray: 4 4; }
 .drop.off .drop-dot { fill: var(--bg); stroke: var(--c); }
+/* Placa só declarada no Vagrantfile (VM ainda não criada). */
+.drop.planned .drop-line { stroke-dasharray: 1 5; stroke-linecap: round; stroke-width: 2.5; }
+.drop.planned .drop-dot { fill: var(--bg); stroke: var(--c); stroke-width: 2; }
+.drop.planned .drop-label { font-style: italic; }
 .drop-label {
   font-size: 11px; font-family: var(--vscode-editor-font-family);
   paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round;
@@ -88,10 +92,16 @@ svg text { fill: var(--vscode-foreground); font-family: var(--vscode-font-family
 .card.stopped .card-name { fill: var(--muted); }
 .card-name { font-size: 13px; font-weight: 600; }
 .card-sub { font-size: 11px; fill: var(--muted); }
-.nat-chip rect { fill: color-mix(in srgb, var(--vscode-foreground) 12%, transparent); }
+.nat-chip rect, .router-chip rect { fill: var(--vscode-foreground); fill-opacity: 0.12; }
+.router-text { font-size: 12px; font-weight: 700; fill: var(--muted); }
 .nat-text { font-size: 10px; font-weight: 700; fill: var(--muted); }
 
 .dim { opacity: 0.18; transition: opacity 0.15s; }
+/* Alcançável só através de um roteador. */
+.card.indirect { opacity: 0.75; }
+.card.indirect .card-bg { stroke: var(--accent); stroke-dasharray: 4 3; }
+.drop.indirect { opacity: 0.6; }
+svg.exporting * { transition: none !important; }
 
 /* ---------- painel lateral ---------- */
 h2 {
@@ -138,6 +148,7 @@ ul.warn li::before { content: '⚠'; position: absolute; left: 0; color: var(--v
 ul.peers li { padding: 3px 0 3px 16px; position: relative; line-height: 1.5; }
 ul.peers li::before { content: '↔'; position: absolute; left: 0; color: var(--muted); font-size: 0.85em; }
 ul.peers li.ok::before { content: '●'; color: #2ea043; font-size: 0.7em; top: 6px; }
+ul.peers li.route::before { content: '⇄'; color: var(--accent); font-size: 0.85em; }
 ul.peers li.warn-row::before { content: '○'; color: var(--vscode-editorWarning-foreground); font-size: 0.75em; top: 5px; }
 
 dl { display: grid; grid-template-columns: max-content 1fr; gap: 7px 14px; margin: 12px 0 0; }

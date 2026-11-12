@@ -21,5 +21,6 @@
   "config.vboxManagePath": "Caminho do VBoxManage, usado para mostrar CPUs, memória, rede e portas das VMs VirtualBox.",
   "config.showGlobalMachines": "Também lista projetos encontrados via `vagrant global-status`, além dos Vagrantfiles do workspace.",
   "config.pruneGlobalStatus": "Usa `vagrant global-status --prune` para remover entradas inválidas do índice (mais lento).",
-  "config.autoRefreshInterval": "Intervalo em segundos para atualizar automaticamente. 0 desliga."
+  "config.autoRefreshInterval": "Intervalo em segundos para atualizar automaticamente. 0 desliga.",
+  "config.topology.readVagrantfile": "Topologia: lê a rede declarada em cada Vagrantfile (roda o Vagrant uma vez por projeto, ~1-2 s) para mostrar as placas planejadas de VMs ainda não criadas e IPs fixos sem Guest Additions."
 }

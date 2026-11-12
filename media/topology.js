@@ -129,7 +129,8 @@
     const busY = (i) => cardBottom + L.busTop + i * L.busGap;
     const netIdx = new Map(nets.map((n, i) => [n.id, i]));
 
-    const width = L.gutter + cols.length * L.colW + L.pad;
+    // Folga à direita para o rótulo de IP da última coluna.
+    const width = L.gutter + cols.length * L.colW + L.pad + 90;
     const height = nets.length ? busY(nets.length - 1) + 44 : cardBottom + L.pad;
     svg.setAttribute('width', String(width));
     svg.setAttribute('height', String(height));
@@ -150,14 +151,14 @@
       const x2 = cols[j].x + L.cardW;
       const y = L.pad + 10;
       const label = trunc(c.vm.project, Math.max(8, Math.floor((x2 - x1) / 7)));
-      const t = text(gHead, x1, y, label, 'project');
+      const t = text(gHead, x1, y, label.toUpperCase(), 'project');
       tip(t, c.vm.cwd);
       el('line', { x1, x2, y1: y + 7, y2: y + 7, class: 'project-line' }, gHead);
       i = j + 1;
     }
 
     // Ligações: para cada coluna, as placas que descem até um barramento.
-    /** @type {{col: any, net: any, x: number, labelX: number, y: number, label: string, title: string, connected: boolean, nic?: any}[]} */
+    /** @type {{col: any, net: any, x: number, labelX: number, y: number, label: string, title: string, connected: boolean, planned: boolean, nic?: any}[]} */
     const drops = [];
     for (const c of cols) {
       /** @type {{net: any, nic?: any, ip?: string, prefix?: number, connected: boolean}[]} */
@@ -181,12 +182,13 @@
           c.kind === 'host' ? S.host : c.vm.name,
           `${typeLabel(a.net.type)}: ${a.net.name}`,
           a.nic ? `${S.adapter} ${a.nic.index}${a.nic.mac ? ' · ' + a.nic.mac : ''}` : '',
-          a.ip ? `IP ${withPrefix(a.ip, a.prefix)}${a.nic?.ipSource === 'dhcp' ? ` (${S.dhcpLease})` : ''}` : S.ipUnknown,
+          a.ip ? `IP ${withPrefix(a.ip, a.prefix)}${ipSourceText(a.nic) ? ` (${ipSourceText(a.nic)})` : ''}` : S.ipUnknown,
+          a.nic?.planned ? S.plannedVagrantfile : '',
           a.connected ? '' : S.cableOff,
         ]
           .filter(Boolean)
           .join('\n');
-        drops.push({ col: c, net: a.net, x: c.cx + dx, labelX, y: busY(netIdx.get(a.net.id)), label, title, connected: a.connected, nic: a.nic });
+        drops.push({ col: c, net: a.net, x: c.cx + dx, labelX, y: busY(netIdx.get(a.net.id)), label, title, connected: a.connected, planned: !!a.nic?.planned, nic: a.nic });
       });
     }
 
@@ -214,7 +216,7 @@
       const color = TYPE_COLOR[d.net.type] || TYPE_COLOR.generic;
       const g = el(
         'g',
-        { class: 'drop' + (d.connected ? '' : ' off'), 'data-net': d.net.id, [`data-${d.col.kind}`]: d.col.key, style: `--c:${color}` },
+        { class: 'drop' + (d.connected ? '' : ' off') + (d.planned ? ' planned' : ''), 'data-net': d.net.id, [`data-${d.col.kind}`]: d.col.key, style: `--c:${color}` },
         gDrop,
       );
       el('line', { x1: d.x, x2: d.x, y1: cardBottom, y2: d.y - 6, class: 'drop-gap' }, g);
@@ -241,8 +243,15 @@
       const g = el('g', { class: 'card' + (v.state === 'running' ? '' : ' stopped'), 'data-vm': v.key }, gCard);
       el('rect', { x: c.x, y: cardTop, width: L.cardW, height: L.cardH, rx: 8, class: 'card-bg' }, g);
       el('rect', { x: c.x, y: cardTop + 8, width: 4, height: L.cardH - 16, rx: 2, fill: color }, g);
-      text(g, c.x + 14, cardTop + 24, trunc(v.name, 20), 'card-name');
-      text(g, c.x + 14, cardTop + 43, trunc(v.box || v.vmName || v.provider || '', 24), 'card-sub');
+      text(g, c.x + 14, cardTop + 24, trunc(v.name, routerNets(v).length > 1 ? 17 : 20), 'card-name');
+      text(g, c.x + 14, cardTop + 43, trunc(v.box || v.vmName || (v.planned ? S.plannedVagrantfile : v.provider) || '', 24), 'card-sub');
+      const rNets = routerNets(v);
+      if (rNets.length > 1) {
+        const chip = el('g', { class: 'router-chip' }, g);
+        el('rect', { x: c.x + L.cardW - 30, y: cardTop + 9, width: 22, height: 18, rx: 9 }, chip);
+        text(chip, c.x + L.cardW - 19, cardTop + 22, '⇄', 'router-text', { 'text-anchor': 'middle' });
+        tip(chip, fmt(S.routerBadge, rNets.length));
+      }
       el('circle', { cx: c.x + 18, cy: cardTop + 62, r: 4, fill: color }, g);
       text(g, c.x + 28, cardTop + 66, trunc(v.note && !v.nics.length ? v.note : v.stateLabel, v.nat ? 15 : 22), 'card-sub');
       if (v.nat) {
@@ -262,12 +271,63 @@
 
   // ---------- seleção e destaque ----------
 
+  /** Redes compartilhadas em que a VM tem placa conectada (2+ = possível roteador). */
+  function routerNets(v) {
+    return [...new Set(v.nics.filter((n) => n.netId && n.connected).map((n) => n.netId))];
+  }
+
+  /**
+   * Alcance indireto (camada 3): busca em largura pelas redes, atravessando VMs
+   * ligadas a mais de uma rede. O host pode ser origem ou destino, nunca
+   * roteador. Devolve os destinos a 2+ saltos com o caminho percorrido.
+   * @returns {{node: string, via: string[], nets: any[], path: string[]}[]}
+   */
+  function routes(start) {
+    const adj = new Map();
+    for (const n of topo.nets) {
+      const nodes = [...new Set(n.members.filter((m) => m.connected).map((m) => m.vm))];
+      if (n.host) nodes.push(HOST);
+      for (const a of nodes) {
+        if (!adj.has(a)) adj.set(a, []);
+        for (const b of nodes) if (a !== b) adj.get(a).push({ node: b, net: n });
+      }
+    }
+    const prev = new Map([[start, null]]);
+    const queue = [start];
+    while (queue.length) {
+      const cur = queue.shift();
+      if (cur === HOST && cur !== start) continue;
+      for (const { node, net } of adj.get(cur) || []) {
+        if (prev.has(node)) continue;
+        prev.set(node, { from: cur, net });
+        queue.push(node);
+      }
+    }
+    const out = [];
+    for (const [node, p] of prev) {
+      if (!p || p.from === start) continue;
+      const path = [node];
+      const nets = [];
+      let n = node;
+      while (prev.get(n)) {
+        const q = prev.get(n);
+        nets.unshift(q.net);
+        path.unshift(q.from);
+        n = q.from;
+      }
+      out.push({ node, via: path.slice(1, -1), nets, path });
+    }
+    return out;
+  }
+
   /** Conjunto de colunas e redes relacionadas à seleção (quem conversa com quem). */
   function related() {
     const sel = ui.sel;
     if (!sel) return null;
     const cols = new Set();
     const nets = new Set();
+    const indirect = new Set();
+    const pathEdges = new Set();
     const addNet = (n) => {
       nets.add(n.id);
       if (n.host) cols.add(HOST);
@@ -283,7 +343,16 @@
       v?.nics.filter((nic) => nic.netId && nic.connected).forEach((nic) => addNet(netBy.get(nic.netId)));
     }
     cols.add(sel.kind === 'host' ? HOST : sel.id);
-    return { cols, nets };
+    if (sel.kind !== 'net') {
+      for (const r of routes(sel.kind === 'host' ? HOST : sel.id)) {
+        indirect.add(r.node);
+        r.nets.forEach((n, i) => {
+          pathEdges.add(`${r.path[i]}|${n.id}`);
+          pathEdges.add(`${r.path[i + 1]}|${n.id}`);
+        });
+      }
+    }
+    return { cols, nets, indirect, pathEdges };
   }
 
   function applyHighlight() {
@@ -292,18 +361,24 @@
     svg.querySelectorAll('.card').forEach((g) => {
       const key = g.getAttribute('data-vm') || g.getAttribute('data-host');
       const selected = !!ui.sel && (ui.sel.kind === 'host' ? key === HOST : key === ui.sel.id) && ui.sel.kind !== 'net';
+      const indirect = !!r && !r.cols.has(key) && r.indirect.has(key);
       g.classList.toggle('selected', selected);
-      g.classList.toggle('dim', !!r && !r.cols.has(key));
+      g.classList.toggle('indirect', indirect);
+      g.classList.toggle('dim', !!r && !r.cols.has(key) && !indirect);
     });
+    const pathNets = new Set(r ? [...r.pathEdges].map((e) => e.slice(e.indexOf('|') + 1)) : []);
     svg.querySelectorAll('.bus').forEach((g) => {
       const id = g.getAttribute('data-net');
-      g.classList.toggle('dim', !!r && !r.nets.has(id));
+      g.classList.toggle('dim', !!r && !r.nets.has(id) && !pathNets.has(id));
       g.classList.toggle('selected', ui.sel?.kind === 'net' && ui.sel.id === id);
     });
     svg.querySelectorAll('.drop').forEach((g) => {
       const key = g.getAttribute('data-vm') || g.getAttribute('data-host');
       const id = g.getAttribute('data-net');
-      g.classList.toggle('dim', !!r && !(r.nets.has(id) && r.cols.has(key)));
+      const direct = !!r && r.nets.has(id) && r.cols.has(key);
+      const onPath = !!r && r.pathEdges.has(`${key}|${id}`);
+      g.classList.toggle('indirect', onPath && !direct);
+      g.classList.toggle('dim', !!r && !direct && !onPath);
     });
   }
 
@@ -370,7 +445,7 @@
     for (const m of net.members) {
       if (m.vm === vmKey && m.nic === nic.index) continue;
       const v = vmBy.get(m.vm);
-      peers.push({ key: m.vm, name: v?.name ?? m.vm, project: v?.project, cwd: v?.cwd, ip: m.ip, prefix: m.prefix, connected: m.connected, running: v?.state === 'running', self: m.vm === vmKey });
+      peers.push({ key: m.vm, name: v?.name ?? m.vm, project: v?.project, cwd: v?.cwd, ip: m.ip, prefix: m.prefix, connected: m.connected, running: v?.state === 'running', state: v?.state, self: m.vm === vmKey });
     }
     return { net, peers };
   }
@@ -378,7 +453,7 @@
   function peerRow(me, nic, p) {
     const flags = [];
     if (p.self) flags.push(S.sameVm);
-    if (!p.running) flags.push(S.stopped);
+    if (!p.running) flags.push(p.state === 'not_created' ? S.notCreated : S.stopped);
     if (!p.connected) flags.push(S.cableOff);
     const prefix = nic.prefix ?? p.prefix;
     if (nic.ip && p.ip && !sameSubnet(nic.ip, p.ip, prefix)) flags.push(`⚠ ${S.differentSubnet}`);
@@ -391,17 +466,46 @@
     }</li>`;
   }
 
+  function ipSourceText(nic) {
+    if (!nic || !nic.ip) return '';
+    return nic.ipSource === 'dhcp' ? S.dhcpLease : nic.ipSource === 'vagrantfile' ? 'Vagrantfile' : '';
+  }
+
+  /** Destinos alcançáveis só através de outras VMs (roteadores). */
+  function routesSection(start, myCwd) {
+    const list = routes(start);
+    if (!list.length) return '';
+    const name = (k) => (k === HOST ? S.host : vmBy.get(k)?.name ?? k);
+    const items = list
+      .map((r) => {
+        const last = r.nets[r.nets.length - 1];
+        const target = r.node === HOST ? last.host : last.members.find((m) => m.vm === r.node);
+        const tv = vmBy.get(r.node);
+        const routers = r.via.map((k) => vmBy.get(k)).filter(Boolean);
+        const down = routers.filter((x) => x.state !== 'running').map((x) => x.name);
+        const link = r.node === HOST ? `<span class="link" data-select-host>${esc(S.host)}</span>` : `<span class="link" data-select-vm="${esc(r.node)}">${esc(name(r.node))}</span>${tv && tv.cwd !== myCwd ? ` <span class="muted">(${esc(tv.project)})</span>` : ''}`;
+        const via = `${esc(fmt(S.via, r.via.map(name).join(' → ')))} <span class="muted small">(${esc(r.nets.map((n) => n.name).join(' → '))})</span>`;
+        const flags = [tv && tv.state !== 'running' ? (tv.state === 'not_created' ? S.notCreated : S.stopped) : '', down.length ? fmt(S.routerDown, down.join(', ')) : ''].filter(Boolean);
+        return `<li class="route">${link} ${target?.ip ? copyable(target.ip) : `<span class="muted">${esc(S.ipUnknown)}</span>`}<div class="muted small">${via}${flags.length ? ' · ' + esc(flags.join(' · ')) : ''}</div></li>`;
+      })
+      .join('');
+    return `<h3>${esc(S.viaRouter)}</h3><p class="muted small">${esc(S.viaHint)}</p><ul class="peers">${items}</ul>`;
+  }
+
   function nicTable(v) {
     const rows = v.nics
       .map((n) => {
         const net = n.netId ? netBy.get(n.netId) : undefined;
         const netCell = n.type === 'nat' ? '<span class="muted">—</span>' : net ? `<span class="link" data-select-net="${esc(net.id)}">${esc(net.name)}</span>` : esc(n.network || '—');
+        const src = ipSourceText(n);
         const ip = n.ip
-          ? copyable(withPrefix(n.ip, n.prefix)) + (n.ipSource === 'dhcp' ? ` <span class="muted small">${esc(S.dhcpLease)}</span>` : '')
+          ? copyable(withPrefix(n.ip, n.prefix)) + (src ? ` <span class="muted small">${esc(src)}</span>` : '')
           : `<span class="muted">${esc(S.ipUnknown)}</span>`;
+        const declared = n.plannedIp && n.plannedIp !== n.ip ? `<div class="muted small">${esc(fmt(S.declaredIp, n.plannedIp))}</div>` : '';
+        const manual = n.manual && n.ip ? `<div class="muted small">${esc(S.manualIp)}</div>` : '';
         const mac = n.mac ? `<div class="sub-line">${copyable(n.mac)}</div>` : '';
         const off = n.connected ? '' : `<div class="muted small">${esc(S.cableOff)}</div>`;
-        return `<tr class="${n.connected ? '' : 'off'}"><td class="muted">${n.index}</td><td>${pill(n.type === 'hostonlynetwork' ? 'hostonly' : n.type, typeLabel(n.type))}<div class="sub-line">${netCell}</div></td><td>${ip}${mac}${off}</td></tr>`;
+        return `<tr class="${n.connected ? '' : 'off'}"><td class="muted">${n.index}</td><td>${pill(n.type === 'hostonlynetwork' ? 'hostonly' : n.type, typeLabel(n.type))}<div class="sub-line">${netCell}</div></td><td>${ip}${declared}${manual}${mac}${off}</td></tr>`;
       })
       .join('');
     return `<table><thead><tr><th>#</th><th>${esc(S.network)}</th><th>IP / MAC</th></tr></thead><tbody>${rows}</tbody></table>`;
@@ -436,8 +540,9 @@
         <button class="primary" data-cmd="showDetails" data-vm-key="${esc(v.key)}">${esc(S.details)}</button>
         ${v.state === 'running' ? `<button class="secondary" data-cmd="ssh" data-vm-key="${esc(v.key)}">SSH</button>` : ''}
       </div>
-      ${v.note && !v.nics.length ? `<p class="muted">${esc(v.note)}</p>` : ''}
+      ${v.note && (!v.nics.length || v.planned) ? `<p class="muted">${esc(v.note)}</p>` : ''}
       ${groups.length ? `<h3>${esc(S.canTalk)}</h3>${groups.join('')}` : v.note ? '' : `<p class="muted">${esc(S.noAdapters)}</p>`}
+      ${routesSection(v.key, v.cwd)}
       ${v.nics.length ? `<h3>${esc(S.adapters)}</h3>${nicTable(v)}` : ''}
       ${v.nics.length && !hasIp ? `<p class="muted small">${esc(S.noIps)}</p>` : ''}`;
   }
@@ -474,7 +579,7 @@
       .map((n) => {
         const peers = n.members.map((m) => {
           const v = vmBy.get(m.vm);
-          return { key: m.vm, name: v?.name ?? m.vm, project: v?.project, cwd: v?.cwd, ip: m.ip, prefix: m.prefix, connected: m.connected, running: v?.state === 'running' };
+          return { key: m.vm, name: v?.name ?? m.vm, project: v?.project, cwd: v?.cwd, ip: m.ip, prefix: m.prefix, connected: m.connected, running: v?.state === 'running', state: v?.state };
         });
         const me = { cwd: '' };
         const nic = { ip: n.host.ip, prefix: n.host.prefix, connected: true };
@@ -487,7 +592,77 @@
       <div class="side-head"><h2 class="title">${esc(S.host)}</h2></div>
       <p class="muted small">${esc(topo.hostName)}</p>
       <p class="muted small">${esc(S.hostHint)}</p>
-      ${groups ? `<h3>${esc(S.canTalk)}</h3>${groups}` : ''}`;
+      ${groups ? `<h3>${esc(S.canTalk)}</h3>${groups}` : ''}
+      ${routesSection(HOST, '')}`;
+  }
+
+  // ---------- exportação ----------
+
+  const EXPORT_PROPS = [
+    'fill', 'fill-opacity', 'stroke', 'stroke-width', 'stroke-dasharray', 'stroke-linecap', 'stroke-linejoin',
+    'stroke-opacity', 'opacity', 'font-size', 'font-weight', 'font-family', 'paint-order', 'letter-spacing',
+  ];
+
+  /** SVG autossuficiente: estilos calculados embutidos, fundo e sem destaque de seleção. */
+  function svgForExport() {
+    const sel = ui.sel;
+    ui.sel = null;
+    svg.classList.add('exporting'); // sem transição: o estilo calculado já é o final
+    applyHighlight();
+    void svg.getBoundingClientRect();
+    const clone = /** @type {SVGSVGElement} */ (svg.cloneNode(true));
+    const src = svg.querySelectorAll('*');
+    const dst = clone.querySelectorAll('*');
+    const drop = [];
+    src.forEach((node, i) => {
+      const d = dst[i];
+      if (node.classList.contains('bus-hit')) drop.push(d);
+      if (node.tagName === 'title') return;
+      const cs = getComputedStyle(node);
+      d.setAttribute('style', EXPORT_PROPS.map((p) => `${p}:${cs.getPropertyValue(p)}`).join(';'));
+      d.removeAttribute('class');
+    });
+    drop.forEach((d) => d.remove());
+    clone.removeAttribute('class');
+    clone.removeAttribute('id');
+    clone.setAttribute('xmlns', NS);
+    const bg = el('rect', { x: 0, y: 0, width: '100%', height: '100%', fill: getComputedStyle(document.body).backgroundColor });
+    clone.insertBefore(bg, clone.firstChild);
+    svg.classList.remove('exporting');
+    ui.sel = sel;
+    applyHighlight();
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
+  }
+
+  /** PNG em 2x a partir do SVG exportado (data URL base64). */
+  function pngForExport() {
+    return new Promise((resolve, reject) => {
+      const w = Number(svg.getAttribute('width'));
+      const h = Number(svg.getAttribute('height'));
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = w * 2;
+        canvas.height = h * 2;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error('canvas'));
+        ctx.scale(2, 2);
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = () => reject(new Error('render'));
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgForExport());
+    });
+  }
+
+  async function onExportRequest(format) {
+    let data = '';
+    try {
+      if (Number(svg.getAttribute('width')) > 0) data = format === 'png' ? await pngForExport() : svgForExport();
+    } catch {
+      data = '';
+    }
+    vscode.postMessage({ type: 'exportData', format, data });
   }
 
   // ---------- eventos ----------
@@ -548,6 +723,9 @@
     render();
   });
   $('refresh').addEventListener('click', () => vscode.postMessage({ type: 'refresh' }));
+  $('export').addEventListener('click', () =>
+    vscode.postMessage({ type: 'export', filter: { project: ui.project, onlyRunning: ui.onlyRunning } }),
+  );
 
   function fillProjects() {
     const opts = [`<option value="">${esc(S.allProjects)}</option>`];
@@ -572,6 +750,8 @@
       fillProjects();
       persist();
       render();
+    } else if (msg.type === 'exportRequest') {
+      void onExportRequest(msg.format);
     } else if (msg.type === 'filter') {
       ui.project = msg.project || '';
       if (topo) {
