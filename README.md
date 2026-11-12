@@ -9,7 +9,10 @@ Gerencie suas VMs Vagrant direto do VS Code.
 - Ações por VM ou por projeto inteiro: **Up, Halt, Reload, Provision, Suspend, Resume, Destroy**.
 - **Tooltip compacto** ao passar o mouse: estado, box, uptime, CPUs, memória, resumo da rede, SSH e links de ação.
 - **Painel de detalhes** ao clicar na VM (ou em "Detalhes"): aba fixa com recursos, acesso SSH, portas redirecionadas, tabela de rede (tipo, rede, MAC, IP quando há Guest Additions), pastas sincronizadas e identificação. Botões de ação, clique em qualquer valor para copiar, e atualização automática após cada comando.
-- **Topologia de rede** (ícone de hierarquia na barra da view, ou "Mostrar Topologia de Rede" no menu do projeto): diagrama de todas as VMs com suas placas ligadas às redes (host-only, bridge, rede interna, NAT network) e ao host. Clique numa VM, numa rede ou no host para destacar **quem conversa com quem** e ver sub-rede, IP do host, faixa do DHCP, IPs, MACs e portas redirecionadas. O NAT padrão do VirtualBox aparece como selo na VM, porque é isolado por máquina. Avisa quando VMs na mesma rede estão em sub-redes diferentes. Os IPs vêm das Guest Additions ou, sem elas, dos leases do DHCP do VirtualBox. Filtros por projeto e "só ligadas".
+- **Topologia de rede** (ícone de hierarquia na barra da view, ou "Mostrar Topologia de Rede" no menu do projeto): diagrama de todas as VMs com suas placas ligadas às redes (host-only, bridge, rede interna, NAT network) e ao host. Clique numa VM, numa rede ou no host para destacar **quem conversa com quem** e ver sub-rede, IP do host, faixa do DHCP, IPs, MACs e portas redirecionadas. O NAT padrão do VirtualBox aparece como selo na VM, porque é isolado por máquina. Avisa quando VMs na mesma rede estão em sub-redes diferentes. Os IPs vêm das Guest Additions, dos leases do DHCP do VirtualBox ou, sem nenhum dos dois, do Vagrantfile. Filtros por projeto e "só ligadas".
+  - **Rede planejada pelo Vagrantfile**: a extensão pede ao próprio Vagrant para avaliar cada Vagrantfile (funciona com loops, hashes e funções que chamam `vb.customize ["modifyvm", ...]`). VMs ainda não criadas aparecem com as placas que vão receber, em linha pontilhada, e os IPs fixos declarados preenchem os que faltam. Desligue com `vagrantManager.topology.readVagrantfile`.
+  - **Roteamento**: VMs ligadas a duas ou mais redes recebem o selo ⇄. Ao selecionar uma VM ou o host, o painel lista também quem é alcançável **através de roteador**, com o caminho (ex.: `via proxy (lab-wan → lab-trunk)`). Isso só funciona se a VM roteadora encaminhar pacotes.
+  - **Exportar** (botão na barra da topologia): SVG ou PNG do diagrama como está na tela, ou Mermaid (arquivo `.md` ou copiado para a área de transferência), respeitando os filtros.
 - Os detalhes são carregados sob demanda e ficam em cache até o próximo refresh.
 - **SSH** abre um terminal integrado com `vagrant ssh <vm>`.
 - Saída dos comandos no canal de output **Vagrant Manager**, com progresso e cancelamento.
@@ -26,6 +29,7 @@ Gerencie suas VMs Vagrant direto do VS Code.
 | `vagrantManager.showGlobalMachines` | `true` | Lista também projetos do `global-status`. |
 | `vagrantManager.pruneGlobalStatus` | `false` | Usa `--prune` no `global-status`. |
 | `vagrantManager.autoRefreshInterval` | `0` | Auto-refresh em segundos (0 desliga). |
+| `vagrantManager.topology.readVagrantfile` | `true` | A topologia lê a rede declarada em cada Vagrantfile (roda o Vagrant uma vez por projeto, ~1-2 s). |
 
 ## Desenvolvimento
 
