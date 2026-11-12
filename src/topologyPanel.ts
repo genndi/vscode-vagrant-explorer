@@ -1,14 +1,20 @@
 import * as crypto from 'crypto';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { Machine } from './vagrant';
 import { MachinesProvider } from './tree';
-import { TopoInput, Topology, analyzeTopology, buildTopology, fillDhcpLeases, loadHostNetworks, machineKey } from './network';
+import { TopoFilter, TopoInput, Topology, analyzeTopology, buildTopology, fillDhcpLeases, loadHostNetworks, machineKey, toMermaid } from './network';
+import { ProjectPlanResult, clearPlanCache, readProjectPlan } from './vagrantfile';
+
+type ExportFormat = 'svg' | 'png';
 
 type Msg =
   | { type: 'ready' }
   | { type: 'refresh' }
   | { type: 'copy'; text: string }
-  | { type: 'command'; command: string; vm?: string };
+  | { type: 'command'; command: string; vm?: string }
+  | { type: 'export'; filter: TopoFilter }
+  | { type: 'exportData'; format: ExportFormat; data: string };
 
 /** Roda `fn` sobre os itens com no máximo `limit` em paralelo. */
 async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
@@ -28,6 +34,11 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 export async function loadTopology(provider: MachinesProvider): Promise<{ topo: Topology; machines: Map<string, Machine> }> {
   const errors: string[] = [];
   const projects = await provider.listProjects();
+  const readPlans = vscode.workspace.getConfiguration('vagrantManager').get<boolean>('topology.readVagrantfile', true);
+  // A leitura do Vagrantfile (~1-2 s por projeto) roda em paralelo com o resto.
+  const plansP: Promise<ProjectPlanResult[]> = readPlans
+    ? mapLimit(projects, 3, (cwd) => readProjectPlan(cwd))
+    : Promise.resolve(projects.map(() => ({})));
   const perProject = await mapLimit(projects, 4, async (cwd) => {
     try {
       return await provider.getMachines(cwd);
@@ -37,7 +48,7 @@ export async function loadTopology(provider: MachinesProvider): Promise<{ topo: 
     }
   });
   const machines = perProject.flat();
-  const [inputs, host] = await Promise.all([
+  const [inputs, host, plans] = await Promise.all([
     mapLimit(machines, 6, async (m): Promise<TopoInput> => {
       try {
         return { machine: m, details: await provider.getNetDetails(m) };
@@ -46,7 +57,15 @@ export async function loadTopology(provider: MachinesProvider): Promise<{ topo: 
       }
     }),
     loadHostNetworks(),
+    plansP,
   ]);
+  const planByCwd = new Map(projects.map((cwd, i) => [cwd, plans[i]]));
+  for (const [cwd, r] of planByCwd) {
+    if (r.error) errors.push(`${path.basename(cwd)}: ${r.error}`);
+  }
+  for (const input of inputs) {
+    input.plan = planByCwd.get(input.machine.cwd)?.plan?.[input.machine.name];
+  }
   const topo = buildTopology(inputs, host);
   await fillDhcpLeases(topo);
   analyzeTopology(topo);
@@ -79,6 +98,7 @@ export class TopologyPanel {
   private pending = false;
   private reloadTimer?: NodeJS.Timeout;
   private lastData?: Topology;
+  private exportWaiter?: (msg: { format: ExportFormat; data: string }) => void;
 
   private constructor(
     private readonly context: vscode.ExtensionContext,
@@ -144,7 +164,15 @@ export class TopologyPanel {
         break;
       case 'refresh':
         // Limpa os caches; o onDidChangeTreeData dispara o reload.
+        clearPlanCache();
         this.provider.refresh();
+        break;
+      case 'export':
+        await this.export(msg.filter);
+        break;
+      case 'exportData':
+        this.exportWaiter?.({ format: msg.format, data: msg.data });
+        this.exportWaiter = undefined;
         break;
       case 'copy':
         await vscode.commands.executeCommand('vagrantManager.copyText', msg.text);
@@ -156,6 +184,66 @@ export class TopologyPanel {
         }
         break;
       }
+    }
+  }
+
+  /** Exporta o diagrama: SVG/PNG desenhados pelo webview, Mermaid gerado aqui. */
+  private async export(filter: TopoFilter): Promise<void> {
+    if (!this.lastData) return;
+    type Item = vscode.QuickPickItem & { id: 'svg' | 'png' | 'md' | 'copy' };
+    const items: Item[] = [
+      { id: 'svg', label: '$(file-media) SVG', description: vscode.l10n.t('vector image, as shown') },
+      { id: 'png', label: '$(file-media) PNG', description: vscode.l10n.t('image, as shown (2x)') },
+      { id: 'md', label: '$(markdown) Mermaid', description: vscode.l10n.t('Markdown file with a mermaid diagram') },
+      { id: 'copy', label: '$(copy) Mermaid', description: vscode.l10n.t('copy to the clipboard') },
+    ];
+    const pick = await vscode.window.showQuickPick(items, { placeHolder: vscode.l10n.t('Export the topology as…') });
+    if (!pick) return;
+
+    if (pick.id === 'md' || pick.id === 'copy') {
+      const mermaid = toMermaid(this.lastData, filter);
+      if (pick.id === 'copy') {
+        await vscode.commands.executeCommand('vagrantManager.copyText', mermaid);
+        return;
+      }
+      const title = vscode.l10n.t('Vagrant network topology');
+      await this.save('md', Buffer.from(`# ${title}\n\n\`\`\`mermaid\n${mermaid}\`\`\`\n`, 'utf8'));
+      return;
+    }
+
+    const format = pick.id;
+    const reply = new Promise<{ format: ExportFormat; data: string }>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(vscode.l10n.t('The diagram did not respond.'))), 15_000);
+      this.exportWaiter = (m) => {
+        clearTimeout(timer);
+        resolve(m);
+      };
+    });
+    void this.panel.webview.postMessage({ type: 'exportRequest', format });
+    try {
+      const { data } = await reply;
+      if (!data) throw new Error(vscode.l10n.t('The diagram could not be rendered.'));
+      const bytes = format === 'png' ? Buffer.from(data.replace(/^data:image\/png;base64,/, ''), 'base64') : Buffer.from(data, 'utf8');
+      await this.save(format, bytes);
+    } catch (e) {
+      vscode.window.showErrorMessage(vscode.l10n.t('Could not export: {0}', e instanceof Error ? e.message : String(e)));
+    }
+  }
+
+  private async save(ext: 'svg' | 'png' | 'md', bytes: Uint8Array): Promise<void> {
+    const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
+    const name = `vagrant-topology.${ext}`;
+    const filters: Record<string, string[]> = { svg: { SVG: ['svg'] }, png: { PNG: ['png'] }, md: { Markdown: ['md'] } }[ext];
+    const uri = await vscode.window.showSaveDialog({
+      defaultUri: folder ? vscode.Uri.joinPath(folder, name) : undefined,
+      filters,
+      saveLabel: vscode.l10n.t('Export'),
+    });
+    if (!uri) return;
+    await vscode.workspace.fs.writeFile(uri, bytes);
+    const open = vscode.l10n.t('Open');
+    if ((await vscode.window.showInformationMessage(vscode.l10n.t('Topology exported to {0}.', path.basename(uri.fsPath)), open)) === open) {
+      await vscode.commands.executeCommand('vscode.open', uri);
     }
   }
 
@@ -213,6 +301,15 @@ export class TopologyPanel {
         generic: vscode.l10n.t('Generic'),
         nat: 'NAT',
       },
+      plannedVagrantfile: vscode.l10n.t('planned (Vagrantfile)'),
+      notCreated: vscode.l10n.t('not created'),
+      declaredIp: vscode.l10n.t('Vagrantfile declares {0}', '{0}'),
+      manualIp: vscode.l10n.t('auto_config: false (set up inside the VM, not by Vagrant)'),
+      routerBadge: vscode.l10n.t('Connected to {0} networks: may route between them', '{0}'),
+      viaRouter: vscode.l10n.t('Through a router'),
+      viaHint: vscode.l10n.t('Only works if the router VM forwards packets (ip_forward) and the VMs have routes to the other network.'),
+      via: vscode.l10n.t('via {0}', '{0}'),
+      routerDown: vscode.l10n.t('router not running: {0}', '{0}'),
       sem: {
         hostonly: vscode.l10n.t('VMs and the host talk to each other. No internet by itself.'),
         bridged: vscode.l10n.t('The VM joins the physical network: reachable by the host and the LAN.'),
@@ -230,7 +327,7 @@ export class TopologyPanel {
     const script = webview.asWebviewUri(vscode.Uri.joinPath(media, 'topology.js'));
     const style = webview.asWebviewUri(vscode.Uri.joinPath(media, 'topology.css'));
     const nonce = crypto.randomBytes(16).toString('base64');
-    const csp = `default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource}; script-src 'nonce-${nonce}';`;
+    const csp = `default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data:; script-src 'nonce-${nonce}';`;
     return /* html */ `<!DOCTYPE html>
 <html lang="${h(vscode.env.language)}">
 <head>
@@ -248,6 +345,7 @@ export class TopologyPanel {
     <span id="summary"></span>
     <span id="spinner">${h(vscode.l10n.t('Loading…'))}</span>
     <span class="spacer"></span>
+    <button class="ghost" id="export">⤓ ${h(vscode.l10n.t('Export'))}</button>
     <button class="ghost" id="refresh">↻ ${h(vscode.l10n.t('Refresh'))}</button>
   </header>
   <main>

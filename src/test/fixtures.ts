@@ -157,3 +157,33 @@ export const STATUS_MR = `1731360000,,metadata,machine-count,2
 1731360000,db,state-human-short,not created
 1731360000,,ui,info,Current machine states:
 `;
+
+/**
+ * JSON gravado pelo script de leitura do Vagrantfile (vagrantfile.ts) para um
+ * laboratório real: a VM "proxy" declara a host-only com `adapter: 5` e cria
+ * as redes internas por `vb.customize ["modifyvm", ...]`.
+ */
+export const PLAN_LAB = {
+  proxy: {
+    networks: [
+      { type: 'private_network', options: { ip: '192.168.56.10', adapter: 5, auto_config: false, mac: '080027A00013', protocol: 'tcp', id: '612cc940' } },
+      { type: 'forwarded_port', options: { guest: 22, host: 2222, host_ip: '127.0.0.1', protocol: 'tcp', id: 'ssh' } },
+    ],
+    customize: [
+      ['modifyvm', 'id', '--cpus', 2],
+      ['modifyvm', 'id', '--memory', '2048'],
+      ['modifyvm', 'id', '--nic2', 'intnet', '--intnet2', 'lab-lan', '--nictype2', 'virtio', '--nicpromisc2', 'allow-all', '--cableconnected2', 'on', '--macaddress2', '080027A00010'],
+      ['modifyvm', 'id', '--nic3', 'intnet', '--intnet3', 'lab-wan', '--nictype3', 'virtio', '--nicpromisc3', 'allow-all', '--cableconnected3', 'on', '--macaddress3', '080027A00011'],
+      ['modifyvm', 'id', '--nic4', 'intnet', '--intnet4', 'lab-trunk', '--nictype4', 'virtio', '--nicpromisc4', 'allow-all', '--cableconnected4', 'on', '--macaddress4', '080027A00012'],
+      ['modifyvm', 'id', '--nicpromisc5', 'allow-all'],
+    ],
+  },
+  inet: {
+    networks: [{ type: 'forwarded_port', options: { guest: 22, host: 2222, host_ip: '127.0.0.1', protocol: 'tcp', id: 'ssh' } }],
+    customize: [['modifyvm', 'id', '--nic2', 'intnet', '--intnet2', 'lab-wan', '--nictype2', 'virtio', '--cableconnected2', 'on']],
+  },
+  'vm-a': {
+    networks: [{ type: 'forwarded_port', options: { guest: 22, host: 2222, host_ip: '127.0.0.1', protocol: 'tcp', id: 'ssh' } }],
+    customize: [['modifyvm', 'id', '--nic2', 'intnet', '--intnet2', 'lab-trunk', '--macaddress2', '080027AA0100']],
+  },
+};
