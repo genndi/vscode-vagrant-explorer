@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.1
+
+- Primeira versão publicada no Visual Studio Marketplace: `code --install-extension genndi.vagrant-explorer`.
+- Ícone da extensão.
+
 ## 0.6.0
 
 - Novo nome: **Vagrant Explorer: VMs & Network Topology** (ID `genndi.vagrant-explorer`). As configurações `vagrantManager.*` continuam valendo.
