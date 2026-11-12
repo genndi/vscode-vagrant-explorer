@@ -17,9 +17,11 @@ import {
   parseLease,
   parseNatNets,
   parseVBoxList,
+  toMermaid,
 } from '../network';
 import { Nic } from '../details';
-import { DHCPSERVERS, HOSTONLYIFS, HOSTONLYNETS, NATNETS_V6, NATNETS_V7 } from './fixtures';
+import { DHCPSERVERS, HOSTONLYIFS, HOSTONLYNETS, NATNETS_V6, NATNETS_V7, PLAN_LAB } from './fixtures';
+import { MachinePlan } from '../vagrantfile';
 
 // ---------- parsers do VBoxManage list ----------
 
@@ -313,5 +315,110 @@ describe('analyzeTopology', () => {
     const topo = topology([vm(R, 'a', [nic(2, 'hostonly', 'vboxnet0', '192.168.56.10'), nic(3, 'intnet', 'lan')])]);
     assert.equal(topo.vms[0].nics[0].ipSource, 'guest');
     assert.equal(topo.vms[0].nics[1].ipSource, undefined);
+  });
+});
+
+describe('rede planejada pelo Vagrantfile', () => {
+  const withPlan = (input: TopoInput, plan: MachinePlan): TopoInput => ({ ...input, plan });
+
+  test('VM não criada ganha as placas declaradas e entra nos segmentos', () => {
+    const topo = topology([
+      withPlan(vm(R, 'proxy', [nic(1, 'nat', 'NAT'), nic(2, 'intnet', 'lab-lan'), nic(3, 'intnet', 'lab-wan'), nic(4, 'intnet', 'lab-trunk'), nic(5, 'hostonly', 'vboxnet0')]), PLAN_LAB.proxy),
+      withPlan(vm(R, 'inet', [], 'not_created'), PLAN_LAB.inet),
+      withPlan(vm(R, 'vm-a', [], 'not_created'), PLAN_LAB['vm-a']),
+    ]);
+    const inet = topo.vms[1];
+    assert.equal(inet.planned, true);
+    assert.equal(inet.note, 'Not created yet: adapters planned from the Vagrantfile.');
+    assert.deepEqual(inet.nics.map((n) => [n.index, n.type, n.netId, n.planned]), [
+      [1, 'nat', undefined, true],
+      [2, 'intnet', 'intnet:lab-wan', true],
+    ]);
+    // O forward "ssh" padrão é remapeado pelo Vagrant; não aparece como planejado.
+    assert.deepEqual(inet.nat?.forwards, []);
+    const wan = net(topo, 'intnet:lab-wan');
+    assert.deepEqual(wan.members.map((m) => [m.vm.split('::')[1], !!m.planned]), [
+      ['proxy', false],
+      ['inet', true],
+    ]);
+    // Com as VMs planejadas, as redes deixam de ter "uma VM só".
+    assert.deepEqual(wan.warnings, []);
+    assert.deepEqual(net(topo, 'intnet:lab-trunk').warnings, []);
+  });
+
+  test('VM criada sem IP observado usa o IP do Vagrantfile', () => {
+    const topo = topology([withPlan(vm(R, 'proxy', [nic(1, 'nat', 'NAT'), nic(5, 'hostonly', 'vboxnet0')]), PLAN_LAB.proxy)]);
+    const n5 = topo.vms[0].nics[1];
+    assert.deepEqual([n5.ip, n5.ipSource, n5.prefix, n5.plannedIp, n5.manual], ['192.168.56.10', 'vagrantfile', 24, '192.168.56.10', true]);
+    assert.equal(net(topo, 'hostonly:vboxnet0').members[0].ip, '192.168.56.10');
+  });
+
+  test('IP observado tem prioridade, mas o declarado fica guardado', () => {
+    const topo = topology([withPlan(vm(R, 'proxy', [nic(1, 'nat', 'NAT'), nic(5, 'hostonly', 'vboxnet0', '192.168.56.9')]), PLAN_LAB.proxy)]);
+    const n5 = topo.vms[0].nics[1];
+    assert.deepEqual([n5.ip, n5.ipSource, n5.plannedIp], ['192.168.56.9', 'guest', '192.168.56.10']);
+  });
+
+  test('IP declarado só é usado se a placa real for do mesmo tipo', () => {
+    const topo = topology([withPlan(vm(R, 'proxy', [nic(1, 'nat', 'NAT'), nic(5, 'intnet', 'outra')]), PLAN_LAB.proxy)]);
+    assert.equal(topo.vms[0].nics[1].ip, undefined);
+  });
+
+  test('host-only que o Vagrant ainda vai criar não gera aviso de interface ausente', () => {
+    const plan: MachinePlan = { networks: [{ type: 'private_network', options: { ip: '192.168.77.5' } }], customize: [] };
+    const topo = topology([withPlan(vm(R, 'nova', [], 'not_created'), plan)]);
+    const n = net(topo, 'hostonly:new host-only (192.168.77.5/24)');
+    assert.deepEqual(n.warnings, []);
+    assert.equal(n.members[0].ip, '192.168.77.5');
+  });
+
+  test('plano com erro ou de outro provider é ignorado', () => {
+    const topo = topology([
+      withPlan(vm(R, 'a', [], 'not_created'), { ...PLAN_LAB.inet, error: 'boom' }),
+      withPlan(vm(R, 'b', [], 'not_created', 'libvirt'), PLAN_LAB.inet),
+    ]);
+    assert.deepEqual(topo.vms.map((v) => v.nics.length), [0, 0]);
+    assert.equal(topo.vms[0].note, 'Not created yet: no network adapters.');
+  });
+});
+
+describe('toMermaid', () => {
+  const lab = () =>
+    topology([
+      vm(R, 'router', [nic(1, 'nat', 'NAT'), nic(2, 'intnet', 'lan', '10.0.0.1'), nic(3, 'hostonly', 'vboxnet0', '192.168.56.10')]),
+      { ...vm(R, 'novo "x"', [], 'not_created'), plan: PLAN_LAB.inet },
+      vm(K, 'master', [nic(2, 'hostonly', 'vboxnet0', '192.168.56.11', { connected: false })], 'poweroff'),
+    ]);
+
+  test('gera flowchart com projetos, redes, host e uma aresta por placa', () => {
+    const m = toMermaid(lab());
+    assert.match(m, /^flowchart LR\n/);
+    assert.match(m, /subgraph p0\["router"\]/);
+    assert.match(m, /subgraph p1\["k8s"\]/);
+    assert.match(m, /v0\["<b>router<\/b><br\/>running · NAT"\]/);
+    assert.match(m, /n0\(\["<b>vboxnet0<\/b><br\/>Host-only · 192\.168\.56\.0\/24"\]\)/);
+    assert.match(m, /host ---\|"192\.168\.56\.1"\| n0/);
+    assert.match(m, /v0 ---\|"nic3 · 192\.168\.56\.10"\| n0/);
+    assert.match(m, /classDef hostonly fill:#2ea04333/);
+    assert.match(m, /class n0 hostonly/);
+  });
+
+  test('placa planejada ou desconectada vira linha pontilhada; VM parada recebe classe', () => {
+    const m = toMermaid(lab());
+    assert.match(m, /n1\(\["<b>lab-wan<\/b>/);
+    assert.match(m, /v1 -\.-\|"nic2 · planned"\| n1/);
+    assert.match(m, /v2 -\.-\|"nic2 · 192\.168\.56\.11"\| n0/);
+    assert.match(m, /class v1,v2 stopped/);
+  });
+
+  test('escapa aspas e respeita os filtros', () => {
+    const t = lab();
+    assert.match(toMermaid(t), /novo #quot;x#quot;/);
+    const onlyK8s = toMermaid(t, { project: K });
+    assert.doesNotMatch(onlyK8s, /router/);
+    assert.match(onlyK8s, /master/);
+    const running = toMermaid(t, { onlyRunning: true });
+    assert.doesNotMatch(running, /master/);
+    assert.doesNotMatch(running, /stopped/);
   });
 });

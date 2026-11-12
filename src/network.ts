@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { Machine, runProcess } from './vagrant';
 import { MachineDetails, Nic, PortForward, vboxManagePath } from './details';
+import { MachinePlan, planNics } from './vagrantfile';
 
 // ---------- redes do host (VBoxManage list ...) ----------
 
@@ -211,6 +212,8 @@ export interface TopoMember {
   ip?: string;
   prefix?: number;
   connected: boolean;
+  /** Placa só declarada no Vagrantfile (a VM ainda não foi criada). */
+  planned?: boolean;
 }
 
 export interface TopoNet {
@@ -229,7 +232,15 @@ export interface TopoNet {
 export interface TopoNic extends Nic {
   netId?: string;
   prefix?: number;
-  ipSource?: 'guest' | 'dhcp';
+  /** De onde veio o IP: Guest Additions, lease do DHCP do VirtualBox ou Vagrantfile. */
+  ipSource?: 'guest' | 'dhcp' | 'vagrantfile';
+  /** IP declarado no Vagrantfile (pode diferir do observado). */
+  plannedIp?: string;
+  plannedMask?: string;
+  /** Placa só declarada no Vagrantfile (a VM ainda não foi criada). */
+  planned?: boolean;
+  /** `auto_config: false`: o Vagrant não configura o IP dentro da VM. */
+  manual?: boolean;
 }
 
 export interface TopoVm {
@@ -246,6 +257,8 @@ export interface TopoVm {
   /** NAT do VirtualBox: isolado por VM (só saída para a internet + port forwards). */
   nat?: { forwards: PortForward[] };
   nics: TopoNic[];
+  /** As placas vieram do Vagrantfile, não do VirtualBox. */
+  planned?: boolean;
   /** Motivo de não haver informação de rede (não criada, outro provider, erro). */
   note?: string;
 }
@@ -261,6 +274,8 @@ export interface Topology {
 export interface TopoInput {
   machine: Machine;
   details?: MachineDetails;
+  /** Rede declarada no Vagrantfile (ver vagrantfile.ts). */
+  plan?: MachinePlan;
   error?: string;
 }
 
@@ -294,7 +309,7 @@ export function buildTopology(inputs: TopoInput[], host: HostNetworks): Topology
     return n;
   };
 
-  for (const { machine: m, details: d, error } of inputs) {
+  for (const { machine: m, details: d, plan, error } of inputs) {
     projects.set(m.cwd, path.basename(m.cwd));
     const vm: TopoVm = {
       key: machineKey(m),
@@ -309,24 +324,50 @@ export function buildTopology(inputs: TopoInput[], host: HostNetworks): Topology
       osType: d?.vbox?.osType,
       nics: [],
     };
+    const isVBox = !m.provider || m.provider === 'virtualbox';
+    const planned = isVBox && plan && !plan.error ? planNics(plan, host.hostonly) : undefined;
+    // Sem VirtualBox (VM não criada), as placas vêm do Vagrantfile.
+    const usePlan = !d?.vbox && !error && !!planned && planned.nics.length > 0;
+
     if (error) {
       vm.note = error;
     } else if (m.state === 'not_created') {
-      vm.note = vscode.l10n.t('Not created yet: no network adapters.');
-    } else if (m.provider && m.provider !== 'virtualbox') {
+      vm.note = usePlan
+        ? vscode.l10n.t('Not created yet: adapters planned from the Vagrantfile.')
+        : vscode.l10n.t('Not created yet: no network adapters.');
+    } else if (!isVBox) {
       vm.note = vscode.l10n.t('Provider {0} is not supported in the topology yet.', m.provider);
     } else if (!d?.vbox) {
       vm.note = d?.errors[0] ?? vscode.l10n.t('No VirtualBox information.');
     }
 
-    for (const nic of d?.vbox?.nics ?? []) {
-      const tn: TopoNic = { ...nic, prefix: maskToPrefix(nic.mask), ipSource: nic.ip ? 'guest' : undefined };
-      if (nic.type === 'nat') {
-        vm.nat = { forwards: d?.vbox?.forwards ?? [] };
-      } else if (SHARED_TYPES.has(nic.type) && nic.network) {
-        const net = getNet(netType(nic.type), nic.network);
+    const source: TopoNic[] = usePlan
+      ? planned!.nics.map((p) => ({
+          index: p.index,
+          type: p.type,
+          network: p.network,
+          mac: p.mac,
+          connected: p.connected,
+          plannedIp: p.ip,
+          plannedMask: p.mask,
+          manual: p.manual,
+          planned: true,
+        }))
+      : (d?.vbox?.nics ?? []).map((nic) => {
+          const p = planned?.nics.find((x) => x.index === nic.index && x.type === nic.type);
+          return { ...nic, ipSource: nic.ip ? 'guest' : undefined, plannedIp: p?.ip, plannedMask: p?.mask, manual: p?.manual };
+        });
+    vm.planned = usePlan || undefined;
+
+    for (const tn of source) {
+      tn.prefix = maskToPrefix(tn.mask);
+      if (tn.type === 'nat') {
+        // O forward "ssh" padrão é remapeado pelo Vagrant em caso de colisão: só vale o real.
+        vm.nat = { forwards: d?.vbox?.forwards ?? (planned?.forwards ?? []).filter((f) => f.name !== 'ssh') };
+      } else if (SHARED_TYPES.has(tn.type) && tn.network) {
+        const net = getNet(netType(tn.type), tn.network);
         tn.netId = net.id;
-        net.members.push({ vm: vm.key, nic: nic.index, mac: nic.mac, ip: nic.ip, prefix: tn.prefix, connected: nic.connected });
+        net.members.push({ vm: vm.key, nic: tn.index, mac: tn.mac, ip: tn.ip, prefix: tn.prefix, connected: tn.connected, planned: tn.planned });
       }
       vm.nics.push(tn);
     }
@@ -369,7 +410,8 @@ function enrichNet(net: TopoNet, host: HostNetworks): void {
     } else {
       // Mesmo sem achar a interface, o host participa da rede por definição.
       net.host = {};
-      if (net.type === 'hostonly' && host.errors.length === 0) {
+      // Interface que o Vagrant ainda vai criar (só VMs planejadas nela) não é problema.
+      if (net.type === 'hostonly' && host.errors.length === 0 && !net.members.every((m) => m.planned)) {
         net.warnings.push(vscode.l10n.t('Host-only interface {0} was not found on the host.', net.name));
       }
     }
@@ -419,12 +461,34 @@ export async function fillDhcpLeases(topo: Topology): Promise<void> {
 
 /** Roda as verificações de sub-rede depois que todos os IPs conhecidos estão preenchidos. */
 export function analyzeTopology(topo: Topology): void {
+  applyPlannedIps(topo);
   for (const net of topo.nets) {
     analyzeNet(net, topo.vms);
     // Propaga a máscara inferida para as placas das VMs (usada no webview).
     for (const m of net.members) {
       const nic = topo.vms.find((v) => v.key === m.vm)?.nics.find((n) => n.index === m.nic);
       if (nic && nic.prefix === undefined) nic.prefix = m.prefix;
+    }
+  }
+}
+
+/**
+ * Por último na ordem de confiança: onde não há IP observado (Guest Additions
+ * ou lease), usa o IP declarado no Vagrantfile.
+ */
+function applyPlannedIps(topo: Topology): void {
+  for (const vm of topo.vms) {
+    for (const nic of vm.nics) {
+      if (nic.ip || !nic.plannedIp) continue;
+      nic.ip = nic.plannedIp;
+      nic.mask = nic.plannedMask;
+      nic.prefix = maskToPrefix(nic.plannedMask);
+      nic.ipSource = 'vagrantfile';
+      const member = topo.nets.find((n) => n.id === nic.netId)?.members.find((m) => m.vm === vm.key && m.nic === nic.index);
+      if (member) {
+        member.ip = nic.ip;
+        member.prefix = nic.prefix;
+      }
     }
   }
 }
@@ -471,4 +535,106 @@ function analyzeNet(net: TopoNet, vms: TopoVm[]): void {
   if (vmCount === 1 && !net.host) {
     net.warnings.push(vscode.l10n.t('Only one VM on this network: nobody else to talk to.'));
   }
+}
+
+// ---------- exportação em Mermaid ----------
+
+const TYPE_COLOR: Record<string, string> = {
+  hostonly: '#2ea043',
+  bridged: '#d29922',
+  natnetwork: '#3794ff',
+  intnet: '#a371f7',
+  generic: '#8b949e',
+};
+
+export function netTypeLabel(type: string): string {
+  switch (type) {
+    case 'hostonly':
+      return 'Host-only';
+    case 'bridged':
+      return 'Bridge';
+    case 'natnetwork':
+      return 'NAT Network';
+    case 'intnet':
+      return vscode.l10n.t('Internal network');
+    default:
+      return vscode.l10n.t('Generic');
+  }
+}
+
+export interface TopoFilter {
+  /** Pasta do projeto; vazio = todos. */
+  project?: string;
+  onlyRunning?: boolean;
+}
+
+/** VMs e redes visíveis com o filtro (mesma regra do webview). */
+export function filterTopology(topo: Topology, filter: TopoFilter = {}): { vms: TopoVm[]; nets: TopoNet[] } {
+  const vms = topo.vms.filter((v) => (!filter.project || v.cwd === filter.project) && (!filter.onlyRunning || v.state === 'running'));
+  const keys = new Set(vms.map((v) => v.key));
+  const nets = topo.nets.filter((n) => n.members.some((m) => keys.has(m.vm)));
+  return { vms, nets };
+}
+
+/** Texto seguro dentro de rótulos entre aspas do Mermaid. */
+function mmd(s: string): string {
+  return s.replace(/"/g, '#quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * Diagrama Mermaid (flowchart) equivalente ao desenho: VMs agrupadas por
+ * projeto, redes como nós arredondados e uma aresta por placa.
+ */
+export function toMermaid(topo: Topology, filter: TopoFilter = {}): string {
+  const { vms, nets } = filterTopology(topo, filter);
+  const netId = new Map(nets.map((n, i) => [n.id, `n${i}`]));
+  const vmId = new Map(vms.map((v, i) => [v.key, `v${i}`]));
+  const out: string[] = ['flowchart LR'];
+
+  const hostNets = nets.filter((n) => n.host);
+  if (hostNets.length) {
+    out.push(`  host[["${mmd(vscode.l10n.t('This computer'))}<br/>${mmd(topo.hostName)}"]]`);
+  }
+
+  for (const p of topo.projects) {
+    const inProject = vms.filter((v) => v.cwd === p.cwd);
+    if (!inProject.length) continue;
+    out.push(`  subgraph p${topo.projects.indexOf(p)}["${mmd(p.label)}"]`);
+    for (const v of inProject) {
+      const extra = [v.stateLabel, v.nat ? 'NAT' : ''].filter(Boolean).join(' · ');
+      out.push(`    ${vmId.get(v.key)}["<b>${mmd(v.name)}</b><br/>${mmd(extra)}"]`);
+    }
+    out.push('  end');
+  }
+
+  for (const n of nets) {
+    const sub = [netTypeLabel(n.type), n.cidr].filter(Boolean).join(' · ');
+    out.push(`  ${netId.get(n.id)}(["<b>${mmd(n.name)}</b><br/>${mmd(sub)}"])`);
+  }
+
+  for (const n of hostNets) {
+    out.push(`  host ---${n.host?.ip ? `|"${mmd(n.host.ip)}"|` : ''} ${netId.get(n.id)}`);
+  }
+  for (const v of vms) {
+    for (const nic of v.nics) {
+      const target = nic.netId ? netId.get(nic.netId) : undefined;
+      if (!target) continue;
+      const label = [`nic${nic.index}`, nic.ip, nic.planned ? vscode.l10n.t('planned') : ''].filter(Boolean).join(' · ');
+      const link = nic.connected && !nic.planned ? '---' : '-.-';
+      out.push(`  ${vmId.get(v.key)} ${link}|"${mmd(label)}"| ${target}`);
+    }
+  }
+
+  const used = new Set(nets.map((n) => n.type));
+  for (const t of used) {
+    const c = TYPE_COLOR[t] ?? TYPE_COLOR.generic;
+    out.push(`  classDef ${t} fill:${c}33,stroke:${c},stroke-width:2px`);
+  }
+  for (const n of nets) out.push(`  class ${netId.get(n.id)} ${n.type}`);
+  const stopped = vms.filter((v) => v.state !== 'running');
+  if (stopped.length) {
+    out.push('  classDef stopped stroke-dasharray:5 4,opacity:0.7');
+    out.push(`  class ${stopped.map((v) => vmId.get(v.key)).join(',')} stopped`);
+  }
+  return out.join('\n') + '\n';
 }

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+- Topologia: rede planejada pelo Vagrantfile, avaliado pelo próprio Vagrant. VMs ainda não criadas aparecem com as placas que vão receber, e IPs fixos declarados preenchem os que faltam (com aviso quando diferem do IP observado).
+- Topologia: roteamento (camada 3). VMs ligadas a mais de uma rede recebem o selo ⇄, e o painel mostra quem é alcançável através de roteador, com o caminho.
+- Topologia: exportar em SVG, PNG ou Mermaid (arquivo `.md` ou área de transferência).
+- Nova configuração `vagrantManager.topology.readVagrantfile`.
+- Testes unitários e CI no GitHub Actions; o `.vsix` é anexado automaticamente às releases.
+
 ## 0.4.0
 
 - Topologia de rede: diagrama com as VMs, suas placas e as redes (host-only, bridge, rede interna, NAT network) e o host, mostrando quem conversa com quem.
