@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0
+
+- Novo nome: **Vagrant Explorer: VMs & Network Topology** (ID `genndi.vagrant-explorer`). As configurações `vagrantManager.*` continuam valendo.
+- Topologia: teste de conectividade. A partir de uma VM ligada (via SSH) ou do host, testa com ping ou com conexão TCP numa porta todos os IPs que a origem deveria alcançar, inclusive através de roteador. Resultados ao lado de cada IP e como selo ✓/✗ nos cards.
+- IP fixo declarado no Vagrantfile passa a ter prioridade sobre o lease do DHCP do VirtualBox, que numa placa com IP fixo é antigo.
+
 ## 0.5.0
 
 - Topologia: rede planejada pelo Vagrantfile, avaliado pelo próprio Vagrant. VMs ainda não criadas aparecem com as placas que vão receber, e IPs fixos declarados preenchem os que faltam (com aviso quando diferem do IP observado).
