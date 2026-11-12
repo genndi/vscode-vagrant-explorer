@@ -1,0 +1,37 @@
+name: Release
+
+# Ao publicar uma release (ex.: gh release create v0.5.0), testa, gera o .vsix
+# e anexa à própria release.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  vsix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Confere se a tag bate com a versão do package.json
+        run: |
+          tag="${{ github.event.release.tag_name }}"
+          version="v$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::A tag $tag não bate com a versão do package.json ($version)."
+            exit 1
+          fi
+      - run: npm ci
+      - run: npm test
+      - run: npx -y @vscode/vsce@3 package
+      - name: Anexa o .vsix à release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" *.vsix --clobber
