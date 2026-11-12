@@ -5,7 +5,7 @@ name: Release
 #
 # A publicação usa Trusted Publishing (OIDC): não há token guardado no
 # repositório. A política fica no Marketplace (publisher genndi → Trusted
-# Publishing) e aponta para genndi/vscode-vagrant-manager e este arquivo,
+# Publishing) e aponta para genndi/vscode-vagrant-explorer e este arquivo,
 # release.yml. Renomear o repositório ou o arquivo exige atualizar a política.
 # Releases marcadas como pré-release não são publicadas.
 on:
