@@ -125,5 +125,19 @@
   "router not running: {0}": "router not running: {0}",
   "Vagrantfile not found.": "Vagrantfile not found.",
   "Could not read the Vagrantfile: {0}": "Could not read the Vagrantfile: {0}",
-  "new host-only ({0})": "new host-only ({0})"
+  "new host-only ({0})": "new host-only ({0})",
+  "Could not connect via SSH: {0}": "Could not connect via SSH: {0}",
+  "Could not connect via SSH (exit code {0}).": "Could not connect via SSH (exit code {0}).",
+  "No IPs to test.": "No IPs to test.",
+  "Start the VM to test its connectivity.": "Start the VM to test its connectivity.",
+  "Test connectivity": "Test connectivity",
+  "TCP port": "TCP port",
+  "empty = ping": "empty = ping",
+  "Testing…": "Testing…",
+  "Tested at {0} ({1})": "Tested at {0} ({1})",
+  "From inside this VM (via SSH), tests every IP listed below: ping, or a TCP connection when a port is given. Firewalls often block ping; try a port such as 22.": "From inside this VM (via SSH), tests every IP listed below: ping, or a TCP connection when a port is given. Firewalls often block ping; try a port such as 22.",
+  "From this computer, tests every IP listed below: ping, or a TCP connection when a port is given.": "From this computer, tests every IP listed below: ping, or a TCP connection when a port is given.",
+  "reachable": "reachable",
+  "no answer": "no answer",
+  "no ping/nc in the VM": "no ping/nc in the VM"
 }

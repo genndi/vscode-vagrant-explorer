@@ -125,5 +125,19 @@
   "router not running: {0}": "roteador desligado: {0}",
   "Vagrantfile not found.": "Vagrantfile não encontrado.",
   "Could not read the Vagrantfile: {0}": "Não foi possível ler o Vagrantfile: {0}",
-  "new host-only ({0})": "nova host-only ({0})"
+  "new host-only ({0})": "nova host-only ({0})",
+  "Could not connect via SSH: {0}": "Não foi possível conectar via SSH: {0}",
+  "Could not connect via SSH (exit code {0}).": "Não foi possível conectar via SSH (código {0}).",
+  "No IPs to test.": "Nenhum IP para testar.",
+  "Start the VM to test its connectivity.": "Ligue a VM para testar a conectividade dela.",
+  "Test connectivity": "Testar conectividade",
+  "TCP port": "Porta TCP",
+  "empty = ping": "vazio = ping",
+  "Testing…": "Testando…",
+  "Tested at {0} ({1})": "Testado às {0} ({1})",
+  "From inside this VM (via SSH), tests every IP listed below: ping, or a TCP connection when a port is given. Firewalls often block ping; try a port such as 22.": "De dentro desta VM (via SSH), testa cada IP listado abaixo: ping, ou conexão TCP quando há uma porta. Firewalls costumam bloquear ping; tente uma porta como a 22.",
+  "From this computer, tests every IP listed below: ping, or a TCP connection when a port is given.": "A partir deste computador, testa cada IP listado abaixo: ping, ou conexão TCP quando há uma porta.",
+  "reachable": "alcançável",
+  "no answer": "sem resposta",
+  "no ping/nc in the VM": "a VM não tem ping/nc"
 }
