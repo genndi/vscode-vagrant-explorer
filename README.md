@@ -9,6 +9,7 @@ Gerencie suas VMs Vagrant direto do VS Code.
 - Ações por VM ou por projeto inteiro: **Up, Halt, Reload, Provision, Suspend, Resume, Destroy**.
 - **Tooltip compacto** ao passar o mouse: estado, box, uptime, CPUs, memória, resumo da rede, SSH e links de ação.
 - **Painel de detalhes** ao clicar na VM (ou em "Detalhes"): aba fixa com recursos, acesso SSH, portas redirecionadas, tabela de rede (tipo, rede, MAC, IP quando há Guest Additions), pastas sincronizadas e identificação. Botões de ação, clique em qualquer valor para copiar, e atualização automática após cada comando.
+- **Topologia de rede** (ícone de hierarquia na barra da view, ou "Mostrar Topologia de Rede" no menu do projeto): diagrama de todas as VMs com suas placas ligadas às redes (host-only, bridge, rede interna, NAT network) e ao host. Clique numa VM, numa rede ou no host para destacar **quem conversa com quem** e ver sub-rede, IP do host, faixa do DHCP, IPs, MACs e portas redirecionadas. O NAT padrão do VirtualBox aparece como selo na VM, porque é isolado por máquina. Avisa quando VMs na mesma rede estão em sub-redes diferentes. Os IPs vêm das Guest Additions ou, sem elas, dos leases do DHCP do VirtualBox. Filtros por projeto e "só ligadas".
 - Os detalhes são carregados sob demanda e ficam em cache até o próximo refresh.
 - **SSH** abre um terminal integrado com `vagrant ssh <vm>`.
 - Saída dos comandos no canal de output **Vagrant Manager**, com progresso e cancelamento.
@@ -21,7 +22,7 @@ Gerencie suas VMs Vagrant direto do VS Code.
 | Chave | Padrão | Descrição |
 |---|---|---|
 | `vagrantManager.vagrantPath` | `vagrant` | Caminho do executável. |
-| `vagrantManager.vboxManagePath` | `VBoxManage` | Caminho do VBoxManage (detalhes no tooltip). |
+| `vagrantManager.vboxManagePath` | `VBoxManage` | Caminho do VBoxManage (detalhes, tooltip e topologia). |
 | `vagrantManager.showGlobalMachines` | `true` | Lista também projetos do `global-status`. |
 | `vagrantManager.pruneGlobalStatus` | `false` | Usa `--prune` no `global-status`. |
 | `vagrantManager.autoRefreshInterval` | `0` | Auto-refresh em segundos (0 desliga). |
