@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { MachinesProvider, MachineItem, ProjectItem } from './tree';
 import { Machine, stream } from './vagrant';
 import { DetailsPanel } from './detailsPanel';
+import { TopologyPanel } from './topologyPanel';
 
 type Target = MachineItem | ProjectItem;
 
@@ -80,6 +81,11 @@ export function activate(context: vscode.ExtensionContext): void {
       if (t instanceof MachineItem) {
         DetailsPanel.show(provider, t.machine);
       }
+    }),
+    vscode.commands.registerCommand('vagrantManager.showTopology', (arg?: unknown) => {
+      // Do menu do projeto, abre já filtrado nele; da barra da view, mostra tudo.
+      const t = toTarget(arg);
+      TopologyPanel.show(context, provider, t instanceof ProjectItem ? t.cwd : undefined);
     }),
     vscode.commands.registerCommand('vagrantManager.copyText', async (text?: string) => {
       if (typeof text === 'string') {
