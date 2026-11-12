@@ -49,6 +49,10 @@ export interface SshConfig {
   port?: string;
   user?: string;
   identityFile?: string;
+  /** Saída completa do `vagrant ssh-config` (para `ssh -F`). */
+  raw?: string;
+  /** Nome do bloco `Host` (o alias usado com `ssh -F`). */
+  alias?: string;
 }
 
 export interface MachineDetails {
@@ -245,11 +249,14 @@ async function readSshConfig(m: Machine, d: MachineDetails): Promise<void> {
     d.errors.push(`ssh-config: ${res.stderr.trim().split('\n')[0] || vscode.l10n.t('exit code {0}', String(res.code))}`);
     return;
   }
-  const ssh: SshConfig = {};
+  const ssh: SshConfig = { raw: res.stdout };
   for (const line of res.stdout.split(/\r?\n/)) {
     const [key, ...rest] = line.trim().split(/\s+/);
     const value = rest.join(' ').replace(/^"|"$/g, '');
     switch (key) {
+      case 'Host':
+        ssh.alias ??= value;
+        break;
       case 'HostName':
         ssh.host = value;
         break;

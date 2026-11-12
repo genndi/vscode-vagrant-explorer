@@ -31,7 +31,7 @@ function toTarget(arg: unknown): Target | undefined {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-  output = vscode.window.createOutputChannel('Vagrant Manager');
+  output = vscode.window.createOutputChannel('Vagrant Explorer');
   const provider = new MachinesProvider();
 
   const view = vscode.window.createTreeView('vagrantManager.machines', {
@@ -42,7 +42,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // Status bar: VMs rodando / total, segundo o global-status.
   const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
   statusItem.command = 'workbench.view.extension.vagrantManager';
-  statusItem.name = 'Vagrant Manager';
+  statusItem.name = 'Vagrant Explorer';
   provider.onDidLoadGlobal((entries) => {
     const running = entries.filter((e) => e.state === 'running').length;
     statusItem.text = `$(vm) ${running}/${entries.length}`;
