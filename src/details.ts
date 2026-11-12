@@ -21,6 +21,8 @@ export interface Nic {
   mac?: string;
   connected: boolean;
   ip?: string;
+  /** Máscara IPv4 reportada pelas Guest Additions (ex.: 255.255.255.0). */
+  mask?: string;
 }
 
 export interface PortForward {
@@ -135,6 +137,7 @@ export function parseShowVmInfo(output: string): VBoxInfo {
     const network =
       kv.get(`intnet${n}`) ??
       kv.get(`hostonlyadapter${n}`) ??
+      kv.get(`hostonly-network${n}`) ??
       kv.get(`bridgeadapter${n}`) ??
       kv.get(`natnetwork${n}`) ??
       (type === 'nat' ? 'NAT' : undefined);
@@ -165,17 +168,22 @@ export function parseShowVmInfo(output: string): VBoxInfo {
   };
 }
 
-/** IPs reportados pelas Guest Additions (se instaladas), indexados pela ordem da placa. */
-async function guestIps(vbox: string, id: string): Promise<Map<string, string>> {
-  const ips = new Map<string, string>(); // mac -> ip
+interface GuestAddr {
+  ip: string;
+  mask?: string;
+}
+
+/** Endereços reportados pelas Guest Additions (se instaladas), indexados pelo MAC. */
+async function guestIps(vbox: string, id: string): Promise<Map<string, GuestAddr>> {
+  const ips = new Map<string, GuestAddr>(); // mac -> ip/máscara
   const res = await runProcess(vbox, ['guestproperty', 'enumerate', id, '--patterns', '/VirtualBox/GuestInfo/Net/*'], undefined, 10_000);
   if (res.code !== 0) {
     return ips;
   }
-  const byIdx = new Map<string, { ip?: string; mac?: string }>();
+  const byIdx = new Map<string, { ip?: string; mask?: string; mac?: string }>();
   // Formatos: "Name: /VirtualBox/GuestInfo/Net/0/V4/IP, value: 10.0.2.15, ..." (6.x)
   //           "/VirtualBox/GuestInfo/Net/0/V4/IP = '10.0.2.15' @ ..."       (7.x)
-  const re = /\/VirtualBox\/GuestInfo\/Net\/(\d+)\/(V4\/IP|MAC)(?:,\s*value:\s*|\s*=\s*')([^,'\s]+)/;
+  const re = /\/VirtualBox\/GuestInfo\/Net\/(\d+)\/(V4\/IP|V4\/Netmask|MAC)(?:,\s*value:\s*|\s*=\s*')([^,'\s]+)/;
   for (const line of res.stdout.split(/\r?\n/)) {
     const m = re.exec(line);
     if (!m) {
@@ -184,6 +192,8 @@ async function guestIps(vbox: string, id: string): Promise<Map<string, string>> 
     const e = byIdx.get(m[1]) ?? {};
     if (m[2] === 'MAC') {
       e.mac = m[3].toUpperCase();
+    } else if (m[2] === 'V4/Netmask') {
+      e.mask = m[3];
     } else {
       e.ip = m[3];
     }
@@ -191,14 +201,18 @@ async function guestIps(vbox: string, id: string): Promise<Map<string, string>> 
   }
   for (const e of byIdx.values()) {
     if (e.mac && e.ip) {
-      ips.set(e.mac, e.ip);
+      ips.set(e.mac, { ip: e.ip, mask: e.mask });
     }
   }
   return ips;
 }
 
+export function vboxManagePath(): string {
+  return cfg('vboxManagePath', 'VBoxManage') || 'VBoxManage';
+}
+
 async function readVBox(id: string, d: MachineDetails): Promise<void> {
-  const vbox = cfg('vboxManagePath', 'VBoxManage');
+  const vbox = vboxManagePath();
   const res = await runProcess(vbox, ['showvminfo', id, '--machinereadable'], undefined, 15_000);
   if (res.code !== 0) {
     d.errors.push(`VBoxManage: ${res.stderr.trim().split('\n')[0] || vscode.l10n.t('exit code {0}', String(res.code))}`);
@@ -208,9 +222,10 @@ async function readVBox(id: string, d: MachineDetails): Promise<void> {
   try {
     const ips = await guestIps(vbox, id);
     for (const nic of info.nics) {
-      const raw = nic.mac?.replace(/:/g, '');
-      if (raw && ips.has(raw)) {
-        nic.ip = ips.get(raw);
+      const addr = ips.get(nic.mac?.replace(/:/g, '') ?? '');
+      if (addr) {
+        nic.ip = addr.ip;
+        nic.mask = addr.mask;
       }
     }
   } catch {
@@ -247,7 +262,11 @@ async function readSshConfig(m: Machine, d: MachineDetails): Promise<void> {
   d.ssh = ssh;
 }
 
-export async function loadDetails(m: Machine): Promise<MachineDetails> {
+/**
+ * Carrega os detalhes da VM. Com `ssh: false` pula o `vagrant ssh-config`
+ * (lento, ~1 s por VM), útil quando só a rede interessa.
+ */
+export async function loadDetails(m: Machine, opts: { ssh?: boolean } = {}): Promise<MachineDetails> {
   const d: MachineDetails = { syncedFolders: [], errors: [] };
   await readLocalMeta(m, d);
 
@@ -255,7 +274,7 @@ export async function loadDetails(m: Machine): Promise<MachineDetails> {
   if (d.id && (m.provider === 'virtualbox' || !m.provider) && m.state !== 'not_created') {
     tasks.push(readVBox(d.id, d).catch((e) => void d.errors.push(`VBoxManage: ${errMsg(e)}`)));
   }
-  if (m.state === 'running') {
+  if (m.state === 'running' && opts.ssh !== false) {
     tasks.push(readSshConfig(m, d).catch((e) => void d.errors.push(`ssh-config: ${errMsg(e)}`)));
   }
   await Promise.all(tasks);

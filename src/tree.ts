@@ -82,10 +82,13 @@ export class MachinesProvider implements vscode.TreeDataProvider<Node> {
   readonly onDidLoadGlobal = this.globalEmitter.event;
 
   private detailsCache = new Map<string, Promise<MachineDetails>>();
+  /** Detalhes sem ssh-config (só rede/recursos), usados pela topologia. */
+  private netCache = new Map<string, Promise<MachineDetails>>();
 
   refresh(): void {
     this.statusCache.clear();
     this.detailsCache.clear();
+    this.netCache.clear();
     this.globalCache = undefined;
     this.emitter.fire();
   }
@@ -93,9 +96,11 @@ export class MachinesProvider implements vscode.TreeDataProvider<Node> {
   /** Atualiza só um projeto (após rodar um comando nele). */
   refreshProject(cwd: string): void {
     this.statusCache.delete(cwd);
-    for (const key of this.detailsCache.keys()) {
-      if (key.startsWith(`machine:${cwd}:`)) {
-        this.detailsCache.delete(key);
+    for (const cache of [this.detailsCache, this.netCache]) {
+      for (const key of cache.keys()) {
+        if (key.startsWith(`machine:${cwd}:`)) {
+          cache.delete(key);
+        }
       }
     }
     this.globalCache = undefined;
@@ -154,9 +159,36 @@ export class MachinesProvider implements vscode.TreeDataProvider<Node> {
     return p;
   }
 
+  /** Detalhes de rede da VM: reaproveita os detalhes completos se já carregados. */
+  getNetDetails(m: Machine): Promise<MachineDetails> {
+    const key = `machine:${m.cwd}:${m.name}`;
+    const full = this.detailsCache.get(key);
+    if (full) {
+      return full;
+    }
+    let p = this.netCache.get(key);
+    if (!p) {
+      p = loadDetails(m, { ssh: false });
+      this.netCache.set(key, p);
+      p.catch(() => this.netCache.delete(key));
+    }
+    return p;
+  }
+
   /** Estado atual de uma VM específica (usa o cache de status do projeto). */
   async getMachine(cwd: string, name: string): Promise<Machine | undefined> {
     return (await this.getStatus(cwd)).find((m) => m.name === name);
+  }
+
+  /** Pastas de projeto conhecidas (workspace + global-status), na ordem da árvore. */
+  async listProjects(): Promise<string[]> {
+    const nodes = await this.getProjects();
+    return nodes.filter((n): n is ProjectItem => n instanceof ProjectItem).map((p) => p.cwd);
+  }
+
+  /** VMs de um projeto (usa o mesmo cache da árvore). */
+  getMachines(cwd: string): Promise<Machine[]> {
+    return this.getStatus(cwd);
   }
 
   private getStatus(cwd: string): Promise<Machine[]> {
