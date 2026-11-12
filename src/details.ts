@@ -168,23 +168,28 @@ export function parseShowVmInfo(output: string): VBoxInfo {
   };
 }
 
-interface GuestAddr {
+export interface GuestAddr {
   ip: string;
   mask?: string;
 }
 
 /** Endereços reportados pelas Guest Additions (se instaladas), indexados pelo MAC. */
 async function guestIps(vbox: string, id: string): Promise<Map<string, GuestAddr>> {
-  const ips = new Map<string, GuestAddr>(); // mac -> ip/máscara
   const res = await runProcess(vbox, ['guestproperty', 'enumerate', id, '--patterns', '/VirtualBox/GuestInfo/Net/*'], undefined, 10_000);
-  if (res.code !== 0) {
-    return ips;
-  }
+  return res.code === 0 ? parseGuestProperties(res.stdout) : new Map();
+}
+
+/**
+ * Interpreta `VBoxManage guestproperty enumerate` e devolve MAC (sem ":",
+ * maiúsculo) → IP/máscara.
+ */
+export function parseGuestProperties(output: string): Map<string, GuestAddr> {
+  const ips = new Map<string, GuestAddr>();
   const byIdx = new Map<string, { ip?: string; mask?: string; mac?: string }>();
   // Formatos: "Name: /VirtualBox/GuestInfo/Net/0/V4/IP, value: 10.0.2.15, ..." (6.x)
   //           "/VirtualBox/GuestInfo/Net/0/V4/IP = '10.0.2.15' @ ..."       (7.x)
   const re = /\/VirtualBox\/GuestInfo\/Net\/(\d+)\/(V4\/IP|V4\/Netmask|MAC)(?:,\s*value:\s*|\s*=\s*')([^,'\s]+)/;
-  for (const line of res.stdout.split(/\r?\n/)) {
+  for (const line of output.split(/\r?\n/)) {
     const m = re.exec(line);
     if (!m) {
       continue;

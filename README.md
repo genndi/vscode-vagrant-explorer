@@ -36,6 +36,19 @@ npm run compile
 
 Abra a pasta no VS Code e aperte **F5** para abrir a janela de desenvolvimento.
 
+### Testes
+
+```bash
+npm test
+```
+
+Testes unitários com o runner nativo do Node (`node:test`), sem dependências extras, em `src/test/`. Cobrem as funções puras: os parsers da saída do Vagrant e do VBoxManage, a matemática de IPv4, a montagem e a análise da topologia, e a formatação do tooltip. O módulo `vscode` é substituído por um stub (`src/test/vscodeStub.ts`), que deve ser o primeiro import de cada arquivo de teste. As fixtures em `src/test/fixtures.ts` seguem o formato real das saídas do VirtualBox 6 e 7.
+
+### CI
+
+- **CI** (`.github/workflows/ci.yml`): em cada push na `main` e em cada PR, roda lint e testes no Node 18 e 20, e gera o `.vsix` como artefato.
+- **Release** (`.github/workflows/release.yml`): ao publicar uma release no GitHub, confere se a tag bate com a versão do `package.json`, roda os testes e anexa o `.vsix` à release.
+
 Para gerar o pacote instalável:
 
 ```bash
