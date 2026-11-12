@@ -1,6 +1,14 @@
 # Vagrant Explorer
 
-Gerencie suas VMs Vagrant direto do VS Code.
+Gerencie suas VMs Vagrant direto do VS Code, com a topologia de rede das máquinas.
+
+## Instalação
+
+Procure **Vagrant Explorer** na aba de extensões do VS Code, ou rode:
+
+```bash
+code --install-extension genndi.vagrant-explorer
+```
 
 ## Funcionalidades
 
@@ -52,7 +60,7 @@ Testes unitários com o runner nativo do Node (`node:test`), sem dependências e
 ### CI
 
 - **CI** (`.github/workflows/ci.yml`): em cada push na `main` e em cada PR, roda lint e testes no Node 18 e 20, e gera o `.vsix` como artefato.
-- **Release** (`.github/workflows/release.yml`): ao publicar uma release no GitHub, confere se a tag bate com a versão do `package.json`, roda os testes e anexa o `.vsix` à release.
+- **Release** (`.github/workflows/release.yml`): ao publicar uma release no GitHub, confere se a tag bate com a versão do `package.json`, roda os testes, anexa o `.vsix` à release e publica no Visual Studio Marketplace. A publicação usa **Trusted Publishing** (OIDC), sem token guardado no repositório: a política fica no Marketplace (publisher `genndi` → Trusted Publishing) e aponta para este repositório e para o `release.yml`. Releases marcadas como pré-release não são publicadas.
 
 Para gerar o pacote instalável:
 

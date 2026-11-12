@@ -1,13 +1,20 @@
 name: Release
 
-# Ao publicar uma release (ex.: gh release create v0.5.0), testa, gera o .vsix
-# e anexa à própria release.
+# Ao publicar uma release (ex.: gh release create v0.6.1), testa, gera o .vsix,
+# anexa à própria release e publica no Visual Studio Marketplace.
+#
+# A publicação usa Trusted Publishing (OIDC): não há token guardado no
+# repositório. A política fica no Marketplace (publisher genndi → Trusted
+# Publishing) e aponta para genndi/vscode-vagrant-manager e este arquivo,
+# release.yml. Renomear o repositório ou o arquivo exige atualizar a política.
+# Releases marcadas como pré-release não são publicadas.
 on:
   release:
     types: [published]
 
 permissions:
   contents: write
+  id-token: write # token OIDC trocado pela credencial do Marketplace
 
 jobs:
   vsix:
@@ -35,3 +42,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${{ github.event.release.tag_name }}" *.vsix --clobber
+      - name: Publica no Visual Studio Marketplace
+        if: ${{ !github.event.release.prerelease }}
+        run: npx -y @vscode/vsce@latest publish --oidc --packagePath *.vsix
