@@ -6,3 +6,5 @@ node_modules/**
 tsconfig.json
 .gitignore
 .claude/**
+out/test/**
+.github/**

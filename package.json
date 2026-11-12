@@ -360,6 +360,7 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "lint": "tsc -p ./ --noEmit",
+    "test": "npm run compile && node --test out/test/*.test.js",
     "package": "npx -y -p node@22 -p @vscode/vsce@3 -- vsce package",
     "l10n:export": "npx -y -p node@22 -p @vscode/l10n-dev@0.0.35 -- vscode-l10n-dev export -o ./l10n ./src"
   },
