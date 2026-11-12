@@ -17,7 +17,7 @@ import { PortForward } from './details';
  * "deadlock; recursive locking". O Vagrantfile do projeto já é executado pela
  * extensão a cada `vagrant status`, então o nível de confiança é o mesmo.
  */
-const DUMP_SCRIPT = `# Gerado pelo Vagrant Manager (VS Code). Pode apagar.
+const DUMP_SCRIPT = `# Gerado pelo Vagrant Explorer (VS Code). Pode apagar.
 require "json"
 VM_KEYS = %i[ip netmask type virtualbox__intnet name bridge adapter auto_config mac guest host host_ip protocol id disabled].freeze
 def vm_plain(v)
@@ -122,7 +122,7 @@ export async function readProjectPlan(cwd: string): Promise<ProjectPlanResult> {
 }
 
 async function dumpProject(cwd: string): Promise<ProjectPlanResult> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'vagrant-manager-'));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'vagrant-explorer-'));
   try {
     const out = path.join(dir, 'plan.json');
     // O embrulho usa o mesmo nome que o Vagrant vai procurar.

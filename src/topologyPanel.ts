@@ -5,6 +5,7 @@ import { Machine } from './vagrant';
 import { MachinesProvider } from './tree';
 import { TopoFilter, TopoInput, Topology, analyzeTopology, buildTopology, fillDhcpLeases, loadHostNetworks, machineKey, toMermaid } from './network';
 import { ProjectPlanResult, clearPlanCache, readProjectPlan } from './vagrantfile';
+import { ProbeOutcome, probeFromHost, probeFromVm, sanitizeTargets } from './probe';
 
 type ExportFormat = 'svg' | 'png';
 
@@ -14,7 +15,11 @@ type Msg =
   | { type: 'copy'; text: string }
   | { type: 'command'; command: string; vm?: string }
   | { type: 'export'; filter: TopoFilter }
-  | { type: 'exportData'; format: ExportFormat; data: string };
+  | { type: 'exportData'; format: ExportFormat; data: string }
+  | { type: 'probe'; source: string; ips: unknown; port?: unknown };
+
+/** Chave do host nas mensagens do webview (mesma do topology.js). */
+const HOST_KEY = '__host__';
 
 /** Roda `fn` sobre os itens com no máximo `limit` em paralelo. */
 async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
@@ -170,6 +175,9 @@ export class TopologyPanel {
       case 'export':
         await this.export(msg.filter);
         break;
+      case 'probe':
+        await this.probe(msg.source, msg.ips, msg.port);
+        break;
       case 'exportData':
         this.exportWaiter?.({ format: msg.format, data: msg.data });
         this.exportWaiter = undefined;
@@ -185,6 +193,29 @@ export class TopologyPanel {
         break;
       }
     }
+  }
+
+  /** Teste de conectividade a partir de uma VM (via SSH) ou do host. */
+  private async probe(source: string, rawIps: unknown, rawPort: unknown): Promise<void> {
+    const { ips, port } = sanitizeTargets(rawIps, rawPort);
+    let outcome: ProbeOutcome;
+    try {
+      if (!ips.length) {
+        outcome = { results: {}, error: vscode.l10n.t('No IPs to test.') };
+      } else if (source === HOST_KEY) {
+        outcome = await probeFromHost(ips, port);
+      } else {
+        const m = this.machines.get(source);
+        if (!m || m.state !== 'running') {
+          outcome = { results: {}, error: vscode.l10n.t('Start the VM to test its connectivity.') };
+        } else {
+          outcome = await probeFromVm(m, (await this.provider.getDetails(m)).ssh, ips, port);
+        }
+      }
+    } catch (e) {
+      outcome = { results: {}, error: e instanceof Error ? e.message : String(e) };
+    }
+    void this.panel.webview.postMessage({ type: 'probeResult', source, port: port ?? null, at: Date.now(), ...outcome });
   }
 
   /** Exporta o diagrama: SVG/PNG desenhados pelo webview, Mermaid gerado aqui. */
@@ -310,6 +341,17 @@ export class TopologyPanel {
       viaHint: vscode.l10n.t('Only works if the router VM forwards packets (ip_forward) and the VMs have routes to the other network.'),
       via: vscode.l10n.t('via {0}', '{0}'),
       routerDown: vscode.l10n.t('router not running: {0}', '{0}'),
+      probe: vscode.l10n.t('Test connectivity'),
+      probePort: vscode.l10n.t('TCP port'),
+      probePortHint: vscode.l10n.t('empty = ping'),
+      probing: vscode.l10n.t('Testing…'),
+      probedAt: vscode.l10n.t('Tested at {0} ({1})', '{0}', '{1}'),
+      probeHintVm: vscode.l10n.t('From inside this VM (via SSH), tests every IP listed below: ping, or a TCP connection when a port is given. Firewalls often block ping; try a port such as 22.'),
+      probeHintHost: vscode.l10n.t('From this computer, tests every IP listed below: ping, or a TCP connection when a port is given.'),
+      probeNeedsRunning: vscode.l10n.t('Start the VM to test its connectivity.'),
+      probeOk: vscode.l10n.t('reachable'),
+      probeFail: vscode.l10n.t('no answer'),
+      probeNoTool: vscode.l10n.t('no ping/nc in the VM'),
       sem: {
         hostonly: vscode.l10n.t('VMs and the host talk to each other. No internet by itself.'),
         bridged: vscode.l10n.t('The VM joins the physical network: reachable by the host and the LAN.'),

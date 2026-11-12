@@ -160,6 +160,25 @@ td { padding: 5px 6px; border-bottom: 1px solid color-mix(in srgb, var(--vscode-
 tr:last-child td { border-bottom: none; }
 tr.off td { opacity: 0.6; }
 
+.probe-box { margin: 4px 0 12px; }
+.probe-row { display: flex; gap: 8px; align-items: center; }
+.probe-row input {
+  width: 96px; font: inherit; color: var(--vscode-input-foreground); background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, var(--border)); border-radius: 3px; padding: 3px 6px;
+}
+.probe-status { margin-top: 6px; }
+button:disabled { opacity: 0.6; cursor: default; }
+.probe { font-size: 0.82em; padding: 0 6px; border-radius: 999px; white-space: nowrap; }
+.probe.ok { color: #3fb950; background: rgba(46, 160, 67, 0.15); }
+.probe.fail { color: var(--vscode-errorForeground); background: rgba(218, 54, 51, 0.15); white-space: normal; }
+.probe.warn { color: var(--vscode-editorWarning-foreground); }
+.probe.wait { color: var(--muted); }
+.probe-badge circle { stroke: var(--bg); stroke-width: 2; }
+.badge-ok circle { fill: #2ea043; }
+.badge-fail circle { fill: #da3633; }
+.badge-wait circle, .badge-notool circle { fill: #6e7681; }
+.badge-text { font-size: 11px; font-weight: 700; fill: #fff !important; }
+
 #toast {
   position: fixed; bottom: 18px; right: 18px; padding: 6px 14px; border-radius: 4px;
   background: var(--vscode-notifications-background); color: var(--vscode-notifications-foreground);

@@ -29,7 +29,14 @@
 
   const saved = vscode.getState() || {};
   /** @type {{project: string, onlyRunning: boolean, sel: null | {kind: 'vm'|'net'|'host', id: string}}} */
-  const ui = { project: saved.project || '', onlyRunning: !!saved.onlyRunning, sel: saved.sel || null };
+  const ui = { project: saved.project || '', onlyRunning: !!saved.onlyRunning, sel: saved.sel || null, probePort: saved.probePort || '' };
+  /**
+   * Resultados do teste de conectividade por origem (VM ou host).
+   * @type {Map<string, {running: boolean, port: number|null, at?: number, error?: string, targets: [string, string][], results: Record<string, {status: string, rttMs?: number}>}>}
+   */
+  const probes = new Map();
+  /** Posição de cada card (para os selos do teste). */
+  const cardPos = new Map();
   /** @type {any} */
   let topo = null;
   let vmBy = new Map();
@@ -228,7 +235,9 @@
 
     // Cards (por cima do início das descidas).
     const gCard = el('g', { class: 'cards' }, svg);
+    cardPos.clear();
     for (const c of cols) {
+      cardPos.set(c.key, { x: c.x, y: cardTop });
       if (c.kind === 'host') {
         const g = el('g', { class: 'card host', 'data-host': HOST }, gCard);
         el('rect', { x: c.x, y: cardTop, width: L.cardW, height: L.cardH, rx: 8, class: 'card-bg' }, g);
@@ -380,6 +389,99 @@
       g.classList.toggle('indirect', onPath && !direct);
       g.classList.toggle('dim', !!r && !direct && !onPath);
     });
+    drawProbeBadges();
+  }
+
+  // ---------- teste de conectividade ----------
+
+  const sourceOf = (sel) => (sel && sel.kind !== 'net' ? (sel.kind === 'host' ? HOST : sel.id) : null);
+
+  /** IPs a testar a partir da origem: vizinhos diretos e destinos via roteador (só os ligados). */
+  function probeTargets(start) {
+    const ips = new Map();
+    const add = (ip, key) => {
+      if (!ip || ips.has(ip)) return;
+      if (key !== HOST && vmBy.get(key)?.state !== 'running') return;
+      ips.set(ip, key);
+    };
+    const nets = start === HOST
+      ? topo.nets.filter((n) => n.host)
+      : (vmBy.get(start)?.nics || []).filter((n) => n.netId && n.connected && netBy.has(n.netId)).map((n) => netBy.get(n.netId));
+    for (const n of nets) {
+      if (n.host && start !== HOST) add(n.host.ip, HOST);
+      for (const m of n.members) if (m.vm !== start && m.connected) add(m.ip, m.vm);
+    }
+    for (const r of routes(start)) {
+      const last = r.nets[r.nets.length - 1];
+      add(r.node === HOST ? last.host?.ip : last.members.find((m) => m.vm === r.node)?.ip, r.node);
+    }
+    return ips;
+  }
+
+  function startProbe(source) {
+    const input = /** @type {HTMLInputElement|null} */ (document.getElementById('probe-port'));
+    ui.probePort = input ? input.value.trim() : '';
+    persist();
+    const port = /^\d+$/.test(ui.probePort) ? Number(ui.probePort) : null;
+    const targets = probeTargets(source);
+    probes.set(source, { running: true, port, targets: [...targets], results: {} });
+    renderSide();
+    applyHighlight();
+    vscode.postMessage({ type: 'probe', source, ips: [...targets.keys()], port });
+  }
+
+  /** Selo de resultado ao lado de um IP no painel. */
+  function probeBadge(source, ip) {
+    const rec = probes.get(source);
+    if (!rec || !ip || !rec.targets.some(([t]) => t === ip)) return '';
+    if (rec.running) return ` <span class="probe wait">…</span>`;
+    const r = rec.results[ip];
+    if (!r) return '';
+    if (r.status === 'ok') return ` <span class="probe ok">✓ ${esc(r.rttMs !== undefined ? `${r.rttMs} ms` : S.probeOk)}</span>`;
+    if (r.status === 'notool') return ` <span class="probe warn">? ${esc(S.probeNoTool)}</span>`;
+    return ` <span class="probe fail">✗ ${esc(S.probeFail)}</span>`;
+  }
+
+  /** Bloco com o botão de teste, o campo de porta e o estado do último teste. */
+  function probeBox(source, canRun) {
+    if (!canRun) return `<p class="muted small">${esc(S.probeNeedsRunning)}</p>`;
+    const rec = probes.get(source);
+    let status = '';
+    if (rec?.running) status = `<span class="muted">${esc(S.probing)}</span>`;
+    else if (rec?.error) status = `<span class="probe fail">✗ ${esc(rec.error)}</span>`;
+    else if (rec?.at) status = `<span class="muted">${esc(fmt(S.probedAt, new Date(rec.at).toLocaleTimeString(), rec.port ? `tcp/${rec.port}` : 'ping'))}</span>`;
+    return `<div class="probe-box">
+      <div class="probe-row">
+        <button class="secondary" data-probe="${esc(source)}" ${rec?.running ? 'disabled' : ''}>${esc(S.probe)}</button>
+        <input id="probe-port" type="number" min="1" max="65535" placeholder="${esc(S.probePort)}" title="${esc(S.probePortHint)}" value="${esc(ui.probePort)}">
+      </div>
+      ${status ? `<div class="small probe-status">${status}</div>` : ''}
+      <p class="muted small">${esc(source === HOST ? S.probeHintHost : S.probeHintVm)}</p>
+    </div>`;
+  }
+
+  /** Selos ✓/✗ no canto dos cards testados a partir da origem selecionada. */
+  function drawProbeBadges() {
+    svg.querySelectorAll('.probe-badge').forEach((n) => n.remove());
+    const source = sourceOf(ui.sel);
+    const rec = source ? probes.get(source) : undefined;
+    if (!rec) return;
+    const byKey = new Map();
+    for (const [ip, key] of rec.targets) {
+      const r = rec.running ? 'wait' : rec.results[ip]?.status;
+      if (!r) continue;
+      const cur = byKey.get(key);
+      // Um IP que responde basta para a VM contar como alcançável.
+      byKey.set(key, cur === 'ok' || r === 'ok' ? 'ok' : cur === 'wait' || r === 'wait' ? 'wait' : r);
+    }
+    const layer = el('g', { class: 'probe-badge' }, svg);
+    for (const [key, status] of byKey) {
+      const pos = cardPos.get(key);
+      if (!pos) continue;
+      const g = el('g', { class: `badge-${status}` }, layer);
+      el('circle', { cx: pos.x + L.cardW - 2, cy: pos.y + 2, r: 9 }, g);
+      text(g, pos.x + L.cardW - 2, pos.y + 6, status === 'ok' ? '✓' : status === 'wait' ? '…' : status === 'notool' ? '?' : '✗', 'badge-text', { 'text-anchor': 'middle' });
+    }
   }
 
   function select(sel) {
@@ -390,7 +492,7 @@
   }
 
   function persist() {
-    vscode.setState({ project: ui.project, onlyRunning: ui.onlyRunning, sel: ui.sel });
+    vscode.setState({ project: ui.project, onlyRunning: ui.onlyRunning, sel: ui.sel, probePort: ui.probePort });
   }
 
   // ---------- painel lateral ----------
@@ -450,7 +552,7 @@
     return { net, peers };
   }
 
-  function peerRow(me, nic, p) {
+  function peerRow(me, nic, p, source) {
     const flags = [];
     if (p.self) flags.push(S.sameVm);
     if (!p.running) flags.push(p.state === 'not_created' ? S.notCreated : S.stopped);
@@ -461,7 +563,7 @@
     const name = p.host
       ? `<span class="link" data-select-host>${esc(p.name)}</span>`
       : `<span class="link" data-select-vm="${esc(p.key)}">${esc(p.name)}</span>${p.cwd !== me.cwd ? ` <span class="muted">(${esc(p.project)})</span>` : ''}`;
-    return `<li class="${ok ? 'ok' : 'warn-row'}">${name} ${p.ip ? copyable(p.ip) : `<span class="muted">${esc(S.ipUnknown)}</span>`}${
+    return `<li class="${ok ? 'ok' : 'warn-row'}">${name} ${p.ip ? copyable(p.ip) + probeBadge(source, p.ip) : `<span class="muted">${esc(S.ipUnknown)}</span>`}${
       flags.length ? ` <span class="muted small">${esc(flags.join(' · '))}</span>` : ''
     }</li>`;
   }
@@ -486,7 +588,7 @@
         const link = r.node === HOST ? `<span class="link" data-select-host>${esc(S.host)}</span>` : `<span class="link" data-select-vm="${esc(r.node)}">${esc(name(r.node))}</span>${tv && tv.cwd !== myCwd ? ` <span class="muted">(${esc(tv.project)})</span>` : ''}`;
         const via = `${esc(fmt(S.via, r.via.map(name).join(' → ')))} <span class="muted small">(${esc(r.nets.map((n) => n.name).join(' → '))})</span>`;
         const flags = [tv && tv.state !== 'running' ? (tv.state === 'not_created' ? S.notCreated : S.stopped) : '', down.length ? fmt(S.routerDown, down.join(', ')) : ''].filter(Boolean);
-        return `<li class="route">${link} ${target?.ip ? copyable(target.ip) : `<span class="muted">${esc(S.ipUnknown)}</span>`}<div class="muted small">${via}${flags.length ? ' · ' + esc(flags.join(' · ')) : ''}</div></li>`;
+        return `<li class="route">${link} ${target?.ip ? copyable(target.ip) + probeBadge(start, target.ip) : `<span class="muted">${esc(S.ipUnknown)}</span>`}<div class="muted small">${via}${flags.length ? ' · ' + esc(flags.join(' · ')) : ''}</div></li>`;
       })
       .join('');
     return `<h3>${esc(S.viaRouter)}</h3><p class="muted small">${esc(S.viaHint)}</p><ul class="peers">${items}</ul>`;
@@ -518,7 +620,7 @@
       .map((nic) => {
         const { net, peers } = peersOf(v.key, nic);
         const head = `${pill(net.type, net.name)} <span class="muted small">nic${nic.index}${net.cidr ? ' · ' + esc(net.cidr) : ''}${nic.connected ? '' : ' · ' + esc(S.cableOff)}</span>`;
-        const list = peers.length ? `<ul class="peers">${peers.map((p) => peerRow(v, nic, p)).join('')}</ul>` : `<p class="muted small">${esc(S.nobody)}</p>`;
+        const list = peers.length ? `<ul class="peers">${peers.map((p) => peerRow(v, nic, p, v.key)).join('')}</ul>` : `<p class="muted small">${esc(S.nobody)}</p>`;
         return `<div class="group"><div class="group-head" data-select-net="${esc(net.id)}">${head}</div>${list}</div>`;
       });
     if (v.nat) {
@@ -541,7 +643,7 @@
         ${v.state === 'running' ? `<button class="secondary" data-cmd="ssh" data-vm-key="${esc(v.key)}">SSH</button>` : ''}
       </div>
       ${v.note && (!v.nics.length || v.planned) ? `<p class="muted">${esc(v.note)}</p>` : ''}
-      ${groups.length ? `<h3>${esc(S.canTalk)}</h3>${groups.join('')}` : v.note ? '' : `<p class="muted">${esc(S.noAdapters)}</p>`}
+      ${groups.length ? `<h3>${esc(S.canTalk)}</h3>${probeBox(v.key, v.state === 'running')}${groups.join('')}` : v.note ? '' : `<p class="muted">${esc(S.noAdapters)}</p>`}
       ${routesSection(v.key, v.cwd)}
       ${v.nics.length ? `<h3>${esc(S.adapters)}</h3>${nicTable(v)}` : ''}
       ${v.nics.length && !hasIp ? `<p class="muted small">${esc(S.noIps)}</p>` : ''}`;
@@ -584,7 +686,7 @@
         const me = { cwd: '' };
         const nic = { ip: n.host.ip, prefix: n.host.prefix, connected: true };
         return `<div class="group"><div class="group-head" data-select-net="${esc(n.id)}">${pill(n.type, n.name)} <span class="muted small">${esc(withPrefix(n.host.ip, n.host.prefix))}</span></div><ul class="peers">${peers
-          .map((p) => peerRow(me, nic, p))
+          .map((p) => peerRow(me, nic, p, HOST))
           .join('')}</ul></div>`;
       })
       .join('');
@@ -592,7 +694,7 @@
       <div class="side-head"><h2 class="title">${esc(S.host)}</h2></div>
       <p class="muted small">${esc(topo.hostName)}</p>
       <p class="muted small">${esc(S.hostHint)}</p>
-      ${groups ? `<h3>${esc(S.canTalk)}</h3>${groups}` : ''}
+      ${groups ? `<h3>${esc(S.canTalk)}</h3>${probeBox(HOST, true)}${groups}` : ''}
       ${routesSection(HOST, '')}`;
   }
 
@@ -690,9 +792,11 @@
   const toast = $('toast');
   let toastTimer;
   side.addEventListener('click', (e) => {
-    const t = /** @type {HTMLElement} */ (e.target).closest('[data-copy],[data-cmd],[data-select-vm],[data-select-net],[data-select-host]');
+    const t = /** @type {HTMLElement} */ (e.target).closest('[data-copy],[data-cmd],[data-probe],[data-select-vm],[data-select-net],[data-select-host]');
     if (!(t instanceof HTMLElement)) return;
-    if (t.dataset.copy !== undefined) {
+    if (t.dataset.probe) {
+      startProbe(t.dataset.probe);
+    } else if (t.dataset.copy !== undefined) {
       vscode.postMessage({ type: 'copy', text: t.dataset.copy });
       toast.classList.add('show');
       clearTimeout(toastTimer);
@@ -709,7 +813,13 @@
   });
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') select(null);
+    const target = /** @type {HTMLElement} */ (e.target);
+    if (e.key === 'Enter' && target.id === 'probe-port') {
+      const btn = side.querySelector('[data-probe]');
+      if (btn instanceof HTMLElement && btn.dataset.probe) startProbe(btn.dataset.probe);
+    } else if (e.key === 'Escape') {
+      select(null);
+    }
   });
 
   projectSel.addEventListener('change', () => {
@@ -750,6 +860,13 @@
       fillProjects();
       persist();
       render();
+    } else if (msg.type === 'probeResult') {
+      const rec = probes.get(msg.source);
+      probes.set(msg.source, { running: false, port: msg.port, at: msg.at, error: msg.error, targets: rec ? rec.targets : [], results: msg.results || {} });
+      if (sourceOf(ui.sel) === msg.source) {
+        renderSide();
+        applyHighlight();
+      }
     } else if (msg.type === 'exportRequest') {
       void onExportRequest(msg.format);
     } else if (msg.type === 'filter') {

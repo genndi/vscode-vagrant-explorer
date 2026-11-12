@@ -1,8 +1,8 @@
 {
-  "name": "vagrant-manager",
-  "displayName": "Vagrant Manager",
+  "name": "vagrant-explorer",
+  "displayName": "Vagrant Explorer: VMs & Network Topology",
   "description": "%extension.description%",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "publisher": "genndi",
   "author": "Gustavo Enndi",
   "license": "MIT",
@@ -20,7 +20,10 @@
     "vagrant",
     "virtualbox",
     "vm",
-    "devops"
+    "devops",
+    "network",
+    "topology",
+    "vagrantfile"
   ],
   "main": "./out/extension.js",
   "activationEvents": [
@@ -324,7 +327,7 @@
       ]
     },
     "configuration": {
-      "title": "Vagrant Manager",
+      "title": "Vagrant Explorer",
       "properties": {
         "vagrantManager.vagrantPath": {
           "type": "string",

@@ -433,8 +433,9 @@ function enrichNet(net: TopoNet, host: HostNetworks): void {
 }
 
 /**
- * Preenche IPs que faltam com os leases do DHCP do VirtualBox
- * (só VMs ligadas: o lease de uma VM desligada pode estar velho).
+ * Preenche IPs que faltam com os leases do DHCP do VirtualBox. Só para VMs
+ * ligadas (o lease de uma VM desligada pode estar velho) e placas sem IP fixo
+ * no Vagrantfile (placa com IP fixo não usa DHCP: o lease seria de antes).
  */
 export async function fillDhcpLeases(topo: Topology): Promise<void> {
   const jobs: Promise<void>[] = [];
@@ -443,6 +444,7 @@ export async function fillDhcpLeases(topo: Topology): Promise<void> {
     for (const m of net.members) {
       const vm = topo.vms.find((v) => v.key === m.vm);
       if (m.ip || !m.mac || vm?.state !== 'running') continue;
+      if (vm.nics.find((n) => n.index === m.nic)?.plannedIp) continue;
       jobs.push(
         findDhcpLease(net.type, net.name, m.mac).then((ip) => {
           if (!ip) return;
@@ -473,8 +475,9 @@ export function analyzeTopology(topo: Topology): void {
 }
 
 /**
- * Por último na ordem de confiança: onde não há IP observado (Guest Additions
- * ou lease), usa o IP declarado no Vagrantfile.
+ * Onde não há IP das Guest Additions, usa o IP fixo declarado no Vagrantfile.
+ * Ordem de confiança: Guest Additions > IP fixo do Vagrantfile > lease do DHCP
+ * (o lease só é buscado para placas sem IP fixo; ver fillDhcpLeases).
  */
 function applyPlannedIps(topo: Topology): void {
   for (const vm of topo.vms) {
