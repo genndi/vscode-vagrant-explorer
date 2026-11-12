@@ -149,11 +149,15 @@ export async function findDhcpLease(type: string, network: string, mac: string):
   const target = type === 'intnet' ? `--network=${network}` : `--interface=${network}`;
   try {
     const res = await runProcess(vboxManagePath(), ['dhcpserver', 'findlease', target, `--mac-address=${mac}`], undefined, 5_000);
-    if (res.code !== 0) return undefined;
-    return /IP Address:\s*([\d.]+)/i.exec(res.stdout)?.[1];
+    return res.code === 0 ? parseLease(res.stdout) : undefined;
   } catch {
     return undefined;
   }
+}
+
+/** Extrai o IP da saída de `VBoxManage dhcpserver findlease`. */
+export function parseLease(output: string): string | undefined {
+  return /IP Address:\s*([\d.]+)/i.exec(output)?.[1];
 }
 
 // ---------- matemática de IPv4 ----------
