@@ -8,3 +8,4 @@ tsconfig.json
 .claude/**
 out/test/**
 .github/**
+media/icon.svg

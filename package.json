@@ -2,10 +2,15 @@
   "name": "vagrant-explorer",
   "displayName": "Vagrant Explorer: VMs & Network Topology",
   "description": "%extension.description%",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "publisher": "genndi",
   "author": "Gustavo Enndi",
   "license": "MIT",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#0d1322",
+    "theme": "dark"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/genndi/vscode-vagrant-manager.git"
